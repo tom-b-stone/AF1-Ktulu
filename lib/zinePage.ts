@@ -19,23 +19,33 @@ export type ZineAssets = { teaser: string; steps: string[]; preview?: string }; 
 // pdfs: one media id per edition (photo zine, DIY cover, colouring book)
 export type ZineIds = { coverMedia: string; pageUrl: string; pdfs: { photo?: string; diy?: string; colouring?: string } };
 
+// One edition in "The collection" slider: a zine page already on the CMS.
+export type ZineEntry = { pageId: string; gpName: string; year: string; coverMedia: string };
+
+// Same wording on the website slider and in the PDF folding guide.
 export const ZINE_STEPS: { headline: string; copy: string }[] = [
-  { headline: "Print", copy: "Both sheets on A4, landscape, at 100 %. Single-sided." },
-  { headline: "Fold lengthwise", copy: "In half along the long side, crease, open again." },
-  { headline: "Fold eight panels", copy: "Fold into eight equal panels, open it flat." },
-  { headline: "One cut", copy: "Cut only the red dashed line in the middle." },
-  { headline: "Push together", copy: "Fold lengthwise again and push both ends to the centre." },
-  { headline: "Flatten it", copy: "The cut opens into a cross. Fold it into a little book." },
-  { headline: "Nest", copy: "Slide sheet 2 into sheet 1. Staple the spine if you like." },
-  { headline: "Make it yours", copy: "Scan the code on the back, share your zine." },
+  { headline: "Print", copy: "Print both sheets on A4, landscape, at 100 % (not \"fit to page\"), single-sided." },
+  { headline: "Fold lengthwise", copy: "Fold each sheet in half along the long side, crease it, then open it again." },
+  { headline: "Fold eight panels", copy: "Fold it in half along the short side, then into quarters, and open it flat again: eight equal panels." },
+  { headline: "One cut", copy: "Cut along the red dashed line in the middle of each sheet. Only that line." },
+  { headline: "Push together", copy: "Fold along the long side again and push both ends towards the centre, so the cut opens into a cross." },
+  { headline: "Flatten it", copy: "Flatten it into a little book with the cover on the front." },
+  { headline: "Nest", copy: "Open sheet 1 at its centre pages and slide sheet 2 inside. Staple or stitch the spine if you like." },
+  { headline: "Make it yours", copy: "Make it yours, then scan the code on the back and share it." },
 ];
 
-const btn = (label: string, target: { url: string } | { anchor: string }, variant: "primary" | "secondary" | "quaternary" = "primary", newTab = false) => ({
+export const COLLECTION_ANCHOR = "collection";
+
+const btn = (label: string, target: { url: string } | { anchor: string } | { page: string }, variant: "primary" | "secondary" | "quaternary" = "primary", newTab = false) => ({
   blockType: "link-button",
   appearance: { variant, size: "sm", hug: true },
   label,
   iconPlacement: "after",
-  ...("url" in target ? { linkType: "external", url: target.url } : { linkType: "anchor", anchor: target.anchor }),
+  ...("url" in target
+    ? { linkType: "external", url: target.url }
+    : "page" in target
+      ? { linkType: "internal", doc: { relationTo: "pages", value: target.page } }
+      : { linkType: "anchor", anchor: target.anchor }),
   openNewTab: newTab,
 });
 
@@ -45,6 +55,53 @@ export function zinePageTitle(m: ZineMeta) {
 
 export function zinePageSlug(m: ZineMeta) {
   return `gp-mini-zine-${m.slug}`;
+}
+
+// Reads a zine page from the CMS back into a slider entry (null = not a usable zine page).
+export function zineEntryOf(p: { id: string; slug: string; title?: string; sections?: Record<string, unknown>[] }): ZineEntry | null {
+  if (!/^gp-mini-zine-\d{4}-[a-z]+$/.test(p.slug)) return null;
+  const hero = p.sections?.find((s) => s.blockType === "hero") as { container?: { background?: { imageSettings?: { media?: unknown } } } } | undefined;
+  const media = hero?.container?.background?.imageSettings?.media;
+  const coverMedia = typeof media === "string" ? media : (media as { id?: string } | undefined)?.id;
+  const t = (p.title ?? "").match(/\|\s*(.+?)\s+(\d{4})\s*$/);
+  if (!coverMedia || !t) return null;
+  return { pageId: p.id, gpName: t[1], year: t[2], coverMedia };
+}
+
+// "The collection": every GP Mini-Zine built so far, newest first.
+export function buildCollectionSection(entries: ZineEntry[], currentPageId?: string) {
+  return {
+    blockType: "carousel",
+    category: "The collection",
+    headline: "Start the collection.",
+    copy: "Every Grand Prix gets its own edition. These are all of them so far.",
+    hasControls: true,
+    aspectRatio: "aspect-square",
+    ctas: [],
+    carouselItems: entries.map((e) => ({
+      carouselImage: {
+        imagePreview: e.coverMedia,
+        shouldHaveOverlay: false,
+        security: "public",
+        ctas: [],
+        hasFullScreenMode: false,
+        isSameAsFullScreen: true,
+        subline: e.pageId === currentPageId ? `${e.year} · New` : e.year,
+        headline: e.gpName,
+        copy: "Photo, DIY Cover and Colouring Editions.",
+        contentCtas: [btn("Get this edition", e.pageId === currentPageId ? { anchor: "#download" } : { page: e.pageId }, "quaternary")],
+        links: [],
+      },
+    })),
+    anchorId: COLLECTION_ANCHOR,
+    authRequirement: "PUBLIC",
+    blockName: "The collection",
+  };
+}
+
+// Puts the collection slider at the bottom of a page's sections (replaces an older one).
+export function withCollection(sections: Record<string, unknown>[], collection: ReturnType<typeof buildCollectionSection>) {
+  return [...sections.filter((s) => s.anchorId !== COLLECTION_ANCHOR), collection];
 }
 
 const signIn = (label: string, isSignup: boolean, variant: "primary" | "quaternary") => ({
@@ -63,18 +120,18 @@ const download = (label: string, asset: string, variant: "primary" | "secondary"
   asset,
 });
 
-// Compact page: hero → download teaser (logged out: log in / register;
-// logged in: the three PDFs) with the preview video → how-to slider → share.
+// Page: hero → download teaser (logged out: log in / register; logged in:
+// the three PDFs) with the preview video → how-to slider → share → the
+// collection slider (added by the publish route once the page id exists).
 export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineIds) {
   const tags = m.hashtags.join(" ");
   const video = a?.preview ?? a?.teaser;
-  const copy = `Thirteen moments from the ${m.gpName}, 16 pages, two A4 sheets. Pick your edition: the photo zine, a DIY cover to colour in, or the whole zine as a colouring book.`;
   const downloads = [
-    ids.pdfs.photo && download("Photo zine (PDF)", ids.pdfs.photo, "primary"),
-    ids.pdfs.diy && download("DIY cover (PDF)", ids.pdfs.diy, "secondary"),
-    ids.pdfs.colouring && download("Colouring book (PDF)", ids.pdfs.colouring, "secondary"),
+    ids.pdfs.photo && download("Photo Edition (PDF)", ids.pdfs.photo, "primary"),
+    ids.pdfs.diy && download("DIY Cover Edition (PDF)", ids.pdfs.diy, "secondary"),
+    ids.pdfs.colouring && download("Colouring Edition (PDF)", ids.pdfs.colouring, "secondary"),
   ].filter(Boolean);
-  const teaser = (auth: "LOGGED_OUT" | "AUTHENTICATED", headline: string, ctas: unknown[]) => ({
+  const teaser = (auth: "LOGGED_OUT" | "AUTHENTICATED", headline: string, copy: string, ctas: unknown[]) => ({
     blockType: "teaser",
     headline,
     copy,
@@ -91,10 +148,10 @@ export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineId
     {
       blockType: "hero",
       category: "GP Mini-Zine",
-      headline: `Your ${m.city} weekend. In your pocket.`,
-      subline: `${m.gpName} ${m.year}`,
-      copy: "Print it, fold it, colour it in. A zine from the race weekend, made by the team, finished by you.",
-      ctas: [btn("Get your zine", { anchor: "#download" })],
+      headline: `The ${m.gpName}. Yours to keep.`,
+      subline: "A new edition every Grand Prix.",
+      copy: `A printable fan collectible with official team photography from the ${m.city} weekend. Print it, fold it and make it your own.`,
+      ctas: [btn("Get your edition", { anchor: "#download" })],
       container: {
         contentPosition: "bottom",
         horizontalPosition: "left",
@@ -103,13 +160,23 @@ export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineId
       },
       authRequirement: "PUBLIC",
     },
-    teaser("LOGGED_OUT", "Log in. Download. Fold.", [signIn("Log in to download", false, "primary"), signIn("Register now", true, "quaternary")]),
-    teaser("AUTHENTICATED", "Your zine is ready.", downloads),
+    teaser(
+      "LOGGED_OUT",
+      `Your ${m.city} edition is waiting.`,
+      "Log in to download all three editions. Photo Edition: the race weekend through official team photography. DIY Cover Edition: our photos inside, a cover for you to personalise. Colouring Edition: the whole weekend as illustrations to colour.",
+      [signIn("Log in to download", false, "primary"), signIn("Register now", true, "quaternary")]
+    ),
+    teaser(
+      "AUTHENTICATED",
+      `Your ${m.city} edition is ready.`,
+      `The newest addition to your collection: thirteen moments from the ${m.gpName}, captured by the team. Pick your edition, print it at home and keep it with the rest of your season.`,
+      downloads
+    ),
     {
       blockType: "carousel",
       category: "How it works",
       headline: "Eight folds. Ten minutes.",
-      copy: "Printer, scissors, a stapler if you like.",
+      copy: "All you need: a printer, scissors and, if you like, a stapler.",
       hasControls: true,
       aspectRatio: "aspect-square",
       ctas: [],
@@ -134,8 +201,8 @@ export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineId
     {
       blockType: "call-to-action",
       category: "Share",
-      headline: "Show us your zine.",
-      copy: `Post it with ${tags} and tag @${m.instagram}.`,
+      headline: "Show us your edition.",
+      copy: `Coloured in, customised or kept as it is: photograph your finished zine, post it with ${tags} and tag @${m.instagram}. See you at the next Grand Prix.`,
       ctas: [],
       container: {
         contentPosition: "center",
@@ -147,7 +214,7 @@ export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineId
           blockType: "share-to-button-list",
           variant: "tertiary",
           url: ids.pageUrl,
-          shareMessage: `My ${m.city} GP Mini-Zine from the Audi Revolut F1® Team: photos from the ${m.gpName} to print, fold and colour in. ${tags}`,
+          shareMessage: `My ${m.city} edition of the GP Mini-Zine from the Audi Revolut F1® Team: official photos from the ${m.gpName}, printed, folded and made my own. ${tags}`,
           shareButtons: ["whatsapp", "facebook", "twitter", "copy"].map((social) => ({ shareButton: { social } })),
         },
       ],
@@ -160,7 +227,7 @@ export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineId
 export function buildZineMeta(m: ZineMeta, coverMedia: string) {
   return {
     title: `${m.gpName} ${m.year} GP Mini-Zine | Audi Revolut F1® Team`,
-    description: `Print, fold and colour in your own GP Mini-Zine of the ${m.gpName} ${m.year}: thirteen moments from the Audi Revolut F1® Team weekend.`,
+    description: `Download the ${m.gpName} ${m.year} GP Mini-Zine: a printable F1 collectible with official Audi Revolut F1® Team photography, in three editions.`,
     image: coverMedia,
   };
 }

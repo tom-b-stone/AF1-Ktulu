@@ -508,6 +508,20 @@ export async function upsertDraftPage(slug: string, body: Record<string, unknown
   return { id, adminUrl: cmsAdminUrlFor("pages", id, "en"), created: !existing };
 }
 
+// Draft pages whose slug contains `part` (EN sections, depth 0), newest first.
+export type DraftPage = { id: string; slug: string; title?: string; createdAt: string; sections?: Record<string, unknown>[] };
+export async function listDraftPages(part: string, limit = 50): Promise<DraftPage[]> {
+  const res = await payloadFetch(`/pages?where[slug][like]=${encodeURIComponent(part)}&depth=0&draft=true&locale=en&limit=${limit}&sort=-createdAt`);
+  if (!res.ok) throw new Error(`Page list failed (${res.status})`);
+  return ((await res.json()) as { docs: DraftPage[] }).docs ?? [];
+}
+
+// Replaces the EN sections of a draft page (stays a draft).
+export async function patchDraftSections(id: string, sections: unknown[]): Promise<void> {
+  const res = await payloadFetch(`/pages/${id}?draft=true&locale=en`, { method: "PATCH", body: JSON.stringify({ sections, _status: "draft" }) });
+  if (!res.ok) throw new Error(`Page update failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+}
+
 export function stagingFileUrl(path: string): string {
   return path.startsWith("http") ? path : `${baseUrl().replace(/\/cms\/api$/, "")}${path}`;
 }

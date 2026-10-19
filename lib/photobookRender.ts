@@ -18,6 +18,7 @@ import {
   type Book,
 } from "./photobook";
 import { lineArt } from "./lineArt";
+import { ZINE_STEPS } from "./zinePage";
 
 const LAVA = "#E33E1A";
 const CHALK = "#F5F2F2";
@@ -221,12 +222,12 @@ export async function renderPage(book: Book, bookPage: number, getPhoto: PhotoSo
     ctx.fillRect(FRAME + 44, FRAME + 90, 90, 10);
     ctx.fillStyle = ink;
     ctx.font = F(800, 70);
-    let y = wrap(ctx, `Your weekend in ${book.city}.`, FRAME + 44, FRAME + 210, W - 2 * FRAME - 88, 80);
+    let y = wrap(ctx, "This one's yours.", FRAME + 44, FRAME + 210, W - 2 * FRAME - 88, 80);
     ctx.font = F(400, 32);
     ctx.globalAlpha = 0.85;
     y = wrap(
       ctx,
-      `Thirteen moments from the ${book.gpName}${book.dateLabel ? `, ${book.dateLabel}` : ""}. Fold it, keep it, pass it on.`,
+      `Thirteen moments from the ${book.gpName}${book.dateLabel ? `, ${book.dateLabel}` : ""}, seen through the team's lens. One more edition for your collection.`,
       FRAME + 44,
       y + 30,
       W - 2 * FRAME - 88,
@@ -253,7 +254,7 @@ export async function renderPage(book: Book, bookPage: number, getPhoto: PhotoSo
     }
     ctx.fillStyle = ink;
     ctx.font = F(800, 66);
-    ctx.fillText("Share your zine.", FRAME + 44, FRAME + 150);
+    ctx.fillText("Show us yours.", FRAME + 44, FRAME + 150);
     // QR on a chalk tile
     const qrSize = 470;
     const qx = (W - qrSize) / 2;
@@ -270,7 +271,7 @@ export async function renderPage(book: Book, bookPage: number, getPhoto: PhotoSo
     ctx.drawImage(qr, qx, qy, qrSize, qrSize);
     ctx.fillStyle = ink;
     ctx.font = F(500, 30);
-    let y = wrap(ctx, `Scan, post a photo of your zine and tag @${book.instagram}.`, FRAME + 44, qy + qrSize + 110, W - 2 * FRAME - 88, 42);
+    let y = wrap(ctx, `Scan the code, post your edition, coloured in, customised or as it is, and tag @${book.instagram}. See you at the next Grand Prix.`, FRAME + 44, qy + qrSize + 110, W - 2 * FRAME - 88, 42);
     ctx.font = F(800, 34);
     wrap(ctx, book.hashtags.join(" "), FRAME + 44, y + 10, W - 2 * FRAME - 88, 44);
     await drawLogo(ctx, FRAME + 44, H - FRAME - 110, 52, ink);
@@ -375,16 +376,7 @@ export async function buildPdf(book: Book, getPhoto: PhotoSource, origin: string
   g.drawRectangle({ x: 0, y: 0, width: SHEET_W, height: SHEET_H, color: rgb(0.96, 0.95, 0.95) });
   g.drawText("How to fold your GP Mini-Zine", { x: 56, y: SHEET_H - 80, size: 28, font: helvB, color: dark });
   g.drawRectangle({ x: 56, y: SHEET_H - 100, width: 40, height: 4, color: lava });
-  const steps = [
-    "Print both sheets on A4, landscape, at 100 % (no \"fit to page\"). Single-sided.",
-    "Fold each sheet in half along the long side, then unfold.",
-    "Fold it in half along the short side, then into quarters, and unfold again.",
-    "Cut along the dashed red line in the middle of each sheet (only that line).",
-    "Fold along the long side again, push both ends together so the cut opens into a cross.",
-    "Flatten it into a little book: the cover (Grand Prix name) goes on the front.",
-    "Open sheet 1 at its centre pages and lay sheet 2 inside. Staple or stitch the spine if you like.",
-    "Scan the QR code on the back and share your zine.",
-  ];
+  const steps = ZINE_STEPS.map((s) => s.copy); // same wording as the website slider
   let y = SHEET_H - 150;
   steps.forEach((s, i) => {
     g.drawText(String(i + 1).padStart(2, "0"), { x: 56, y, size: 14, font: helvB, color: lava });

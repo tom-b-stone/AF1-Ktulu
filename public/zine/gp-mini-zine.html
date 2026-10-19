@@ -65,7 +65,7 @@
 </head>
 <body>
   <div class="stage" aria-label="Animation: an A4 sheet of Grand Prix photos is cut, folded and turned into a mini book">
-    <div class="title"><div class="k"></div><h1>GP<br/>Mini-Zine</h1><p>Print. Cut. Fold. Your Grand Prix in your pocket.</p></div>
+    <div class="title"><div class="k"></div><h1>GP<br/>Mini-Zine</h1><p>Print. Fold. Make it yours. A new edition every Grand Prix.</p></div>
     <div class="sheet">
       <div class="half top"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></div>
       <div class="half bottom"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></div>
@@ -78,12 +78,15 @@
     <div class="book"><span class="pill" id="round">R18</span><span class="code" id="code">SIN</span>
       <svg viewBox="0 0 100 80" aria-hidden="true"><path d="M14 58 C10 34 26 14 52 13 C76 12 90 28 89 46 L89 56 C89 62 84 64 78 64 L22 64 C17 64 15 62 14 58 Z"/><path d="M30 34 C44 28 66 28 86 34 L88 46 C70 44 46 44 30 47 Z"/><path d="M18 64 L16 70 L80 70 L78 64"/><path d="M40 20 C46 30 46 40 44 44"/></svg>
       <b id="city">Singapore</b><small>Grand Prix 2026</small></div>
-    <div class="tag">Share it <span>#ARF1</span></div>
+    <div class="tag">Share yours <span>#ARF1</span> <span id="gptag">#SingaporeGP</span></div>
   </div>
   <script>
     // ?city=Monza&code=ITA&round=R16&year=2026 to retitle the book, &format=square for the 1:1 CMS video
     const q = new URLSearchParams(location.search);
-    if (q.get("city")) document.getElementById("city").textContent = q.get("city");
+    if (q.get("city")) {
+      document.getElementById("city").textContent = q.get("city");
+      document.getElementById("gptag").textContent = "#" + q.get("city").replace(/[^A-Za-z0-9]/g, "") + "GP";
+    }
     if (q.get("year")) document.querySelector(".book small").textContent = "Grand Prix " + q.get("year");
     if (q.get("code")) document.getElementById("code").textContent = q.get("code");
     if (q.get("round")) document.getElementById("round").textContent = q.get("round");
