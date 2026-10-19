@@ -46,11 +46,12 @@ export async function ensureZineAssets(origin: string, force = false): Promise<Z
   const v2raw = force ? null : await kvGet(KEY_V2).catch(() => null);
   if (v2raw) {
     const v2 = JSON.parse(v2raw) as ZineAssets;
-    const assets = { ...v2, steps: await photoSteps() };
+    const preview = await up("audif1_gp-mini-zine_preview-v2.mp4", "Video: hands open the Audi Revolut F1® Team GP Mini-Zine and flip through its pages (AI-generated)");
+    const assets = { ...v2, preview, steps: await photoSteps() };
     await kvSet(KEY, JSON.stringify(assets));
     return assets;
   }
-  const preview = await up("audif1_gp-mini-zine_preview.mp4", "Animation: the Audi Revolut F1® Team GP Mini-Zine opens and turns its pages, from the colour-in cover to the colouring book pages");
+  const preview = await up("audif1_gp-mini-zine_preview-v2.mp4", "Video: hands open the Audi Revolut F1® Team GP Mini-Zine and flip through its pages (AI-generated)");
   // v1 assets (how-to illustrations, fold animation) are reused, not uploaded twice
   const v1raw = force ? null : await kvGet(KEY_V1).catch(() => null);
   if (v1raw) {

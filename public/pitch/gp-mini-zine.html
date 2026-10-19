@@ -72,7 +72,8 @@
   .face.front { box-shadow:inset 8px 0 14px -10px rgba(0,0,0,.4); }
   .face.back { transform:rotateY(180deg); box-shadow:inset -8px 0 14px -10px rgba(0,0,0,.4); }
   figure.handmade { position:absolute; right:-40px; bottom:-30px; width:360px; margin:0; z-index:5; transform:rotate(4deg); background:#fff; padding:14px 14px 46px; box-shadow:0 30px 70px rgba(0,0,0,.6); }
-  figure.handmade img { width:100%; display:block; }
+  figure.handmade img, figure.handmade video { width:100%; display:block; }
+  figure.reelcard { width:300px; bottom:-60px; }
   figure.handmade figcaption { position:absolute; left:16px; bottom:12px; font-size:17px; color:#2B2929; font-weight:600; }
   .ex { font-size:19px; line-height:1.4; opacity:.9; border-left:4px solid var(--lava); padding-left:16px; }
   .ex b { color:#fff; }
@@ -140,7 +141,7 @@
       </div>
       <div style="position:relative">
         <div class="eyebrow" style="position:absolute;left:0;top:0">Our zine, prototype</div>
-        <figure class="handmade"><img src="/pitch/img/cover-handmade.jpg" alt="A fan's coloured-in GP Mini-Zine on a desk" /><figcaption>A fan's copy, coloured in (AI visual)</figcaption></figure>
+        <figure class="handmade reelcard"><video src="/pitch/img/fan-reel.mp4" autoplay muted loop playsinline aria-label="A fan holds his GP Mini-Zine up to the camera"></video><figcaption>A fan's reel with his zine (AI visual)</figcaption></figure>
         <div class="stage3d">
           <div class="book3d">
             <div class="pg3 base-l"></div>

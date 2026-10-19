@@ -27,7 +27,7 @@ export const ZINE_STEPS: { headline: string; copy: string }[] = [
   { headline: "Push together", copy: "Fold lengthwise again and push both ends to the centre." },
   { headline: "Flatten it", copy: "The cut opens into a cross. Fold it into a little book." },
   { headline: "Nest", copy: "Slide sheet 2 into sheet 1. Staple the spine if you like." },
-  { headline: "Make it yours", copy: "Colour in the cover, scan the code, share it." },
+  { headline: "Make it yours", copy: "Scan the code on the back, share your zine." },
 ];
 
 const btn = (label: string, target: { url: string } | { anchor: string }, variant: "primary" | "secondary" | "quaternary" = "primary", newTab = false) => ({
