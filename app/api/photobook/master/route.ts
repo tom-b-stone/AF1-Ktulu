@@ -5,7 +5,7 @@ import { upsertDraftPage } from "@/lib/payloadClient";
 import { ensureZineAssets } from "@/lib/zineAssets";
 import { collectionEntries } from "@/lib/zineCollection";
 import { buildCollectionSection, buildZineBottom, buildZineMeta, buildZineSections, withCollection, type ZineIds, type ZineMeta } from "@/lib/zinePage";
-import { ZINE_SITE } from "@/lib/photobook";
+import { ZINE_SITE, gpHashtag } from "@/lib/photobook";
 
 // The master preview of the GP Mini-Zine fan page (draft "gp-mini-zine-master"):
 // the current template filled with the newest zine (its cover, PDFs, city,
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const inn = secs.find((s) => s.blockType === "teaser" && s.authRequirement === "AUTHENTICATED");
     const share = secs.find((s) => s.anchorId === "share");
     const city = String(out?.headline ?? "").match(/^Your (.+?) (edition|zine)/)?.[1] ?? e.gpName.replace(/ Grand Prix$/, "");
-    const tagLine = String(share?.copy ?? "").match(/post it with (.+?) and tag @([\w.]+)/);
+    const tagLine = String(share?.copy ?? "").match(/post it with (.+?) and tag @([\w.]+)/i);
     const pdf = (label: RegExp) => idOf((inn?.ctas ?? []).find((c: Json) => label.test(String(c.label)))?.asset);
     const meta: ZineMeta = {
       slug: src.slug.replace(/^gp-mini-zine-/, ""),
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       loc: (src.slug.split("-").pop() ?? "").toUpperCase(),
       year: Number(e.year),
       dateLabel: "",
-      hashtags: tagLine ? tagLine[1].split(/\s+/) : ["#ARF1"],
+      hashtags: tagLine && tagLine[1].includes(" ") ? tagLine[1].split(/\s+/) : ["#ARF1", gpHashtag(city)],
       instagram: tagLine?.[2] ?? "audif1",
     };
     const ids: ZineIds = {

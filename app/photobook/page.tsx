@@ -22,7 +22,7 @@ export default function PhotobookList() {
   const [busy, setBusy] = useState<string | null>(null);
   // "The collection" slider: every published zine's cover as a 3D booklet
   async function refreshCollection() {
-    const list = (books ?? []).filter((b) => b.stagingPageId && b.slug && b.photos.length);
+    const list = (books ?? []).filter((b) => b.slug && b.photos.length && b.coverId); // pages unknown on staging are ignored there
     if (!list.length) return;
     const mockups: { pageSlug: string; mediaId: string }[] = [];
     try {
