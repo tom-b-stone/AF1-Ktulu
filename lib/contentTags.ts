@@ -124,6 +124,21 @@ export type ContentTag = { id: string; title: string };
 export const SCENE_TAGS = ["on-track & garage", "team", "off-track"] as const;
 export type Scene = (typeof SCENE_TAGS)[number];
 
+// Team rule (Tom, Oct 2026): a photo is EITHER "team" OR "on-track & garage", never both.
+//   "team"              = one or two people are the focus of the picture
+//   "on-track & garage" = the car, the crew at work or the action on track is the subject
+export const SCENE_RULE =
+  'Never "team" and "on-track & garage" together, it is one or the other: "team" when one or two people are the focus of the picture, "on-track & garage" when the car, the crew at work or the action on track is the subject.';
+
+// Applies the rule to a tag list: when both are set, the scene Claude saw wins;
+// without one, one or two people tagged → "team", otherwise "on-track & garage".
+export function oneScene(tags: string[], scene?: string): string[] {
+  if (!(tags.includes("team") && tags.includes("on-track & garage"))) return tags;
+  const people = tags.filter((t) => isPersonTag(t)).length;
+  const keep = scene === "team" || scene === "on-track & garage" ? scene : people >= 1 && people <= 2 ? "team" : "on-track & garage";
+  return tags.filter((t) => !((t === "team" || t === "on-track & garage") && t !== keep));
+}
+
 export const WEEKDAY_TAGS = ["tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 export const SESSION_TAGS = ["fp1", "fp2", "fp3", "race qualifying", "sprint qualifying", "sprint race", "race"];
 
@@ -253,7 +268,7 @@ export function proposeRowTags(opts: { people?: string[]; scene?: string }, avai
     if (t && !out.includes(t)) out.push(t);
   }
   if (opts.scene && available.includes(opts.scene)) out.push(opts.scene);
-  return out;
+  return oneScene(out, opts.scene);
 }
 
 // "Nico Hulkenberg" / "Nico Hülkenberg" / "Hulkenberg" → "nico hulkenberg"
@@ -277,6 +292,7 @@ export function tagIssues(batchTags: string[], rowTags: string[], opts: { isGp: 
   if (opts.isGp && !all.some((t) => t.startsWith("gp | "))) issues.push("No Grand Prix tag");
   if (opts.isGp && !all.some((t) => WEEKDAY_TAGS.includes(t) || SESSION_TAGS.includes(t))) issues.push("No day or session tag");
   if (!all.some((t) => (SCENE_TAGS as readonly string[]).includes(t)) && !all.some((t) => isPersonTag(t))) issues.push("No scene (on-track & garage / team / off-track) or person tag");
+  if (all.includes("team") && all.includes("on-track & garage")) issues.push('Both "team" and "on-track & garage": use one (team = one or two people in focus, on-track & garage = car, crew at work, track action)');
   if (all.some((t) => /do not use|wip/.test(t))) issues.push("Uses a tag marked 'do not use'");
   return issues;
 }

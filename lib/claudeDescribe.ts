@@ -22,7 +22,7 @@ const SYSTEM = `You write English alt texts and file-name descriptors for photos
 - alt: one sentence, under ${ALT_MAX} characters, only what is visible, team name exactly "Audi Revolut F1® Team" when the team is mentioned, no em-dash.
 - descriptor: 2–6 lowercase ASCII words joined with hyphens, what the picture shows, no team name.
 - people: official names from the rulebook, only with evidence (car number, name on suit or helmet, a face that matches a reference photo). Otherwise [].
-- scene: "on-track & garage" (car, track, pit lane, garage), "team" (team members, staff, management are the subject) or "off-track" (paddock, fans, city, events).`;
+- scene: exactly one of "team" (one or two people are the focus of the picture), "on-track & garage" (the car, the crew at work or the action on track is the subject) or "off-track" (paddock, fans, city, events). Never "team" and "on-track & garage" together.`;
 
 export async function describePhoto(opts: {
   apiKey: string;

@@ -159,7 +159,7 @@ ${SEO_WRITE_RECIPE}`);
   {
     name: "asset_set_meta",
     annotations: { title: "Write descriptor + alt text", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    description: `Write the file-name descriptor and the English alt text for one photo, plus what is in it for the content tags: "people" (official names of team people you can identify with evidence, empty if none) and "scene" (one of "on-track & garage" = car, track, pit lane, garage; "team" = team members, staff, management in frame; "off-track" = paddock, fans, city, events). Validates: alt under ${ALT_MAX} chars, team name only "Audi Revolut F1® Team", no em-dash, official spellings. Returns the issues if any; fix and call again.`,
+    description: `Write the file-name descriptor and the English alt text for one photo, plus what is in it for the content tags: "people" (official names of team people you can identify with evidence, empty if none) and "scene" (exactly one of "team" = one or two people are the focus of the picture; "on-track & garage" = the car, the crew at work or the action on track is the subject; "off-track" = paddock, fans, city, events; never "team" and "on-track & garage" together). Validates: alt under ${ALT_MAX} chars, team name only "Audi Revolut F1® Team", no em-dash, official spellings. Returns the issues if any; fix and call again.`,
     inputSchema: {
       type: "object",
       required: ["batchId", "rowId", "descriptor", "alt", "scene"],

@@ -13,7 +13,7 @@ import Modal from "@/app/components/Modal";
 import { SideButton, SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import Steps from "@/app/components/Steps";
 import TagPicker from "@/app/components/TagPicker";
-import { SCENE_TAGS, isPersonTag, missingPersonTags, peopleInText, proposeBatchTags, proposeRowTags, tagIssues, uniqueTags, withPeople, type ContentTag } from "@/lib/contentTags";
+import { SCENE_TAGS, isPersonTag, missingPersonTags, oneScene, peopleInText, proposeBatchTags, proposeRowTags, tagIssues, uniqueTags, withPeople, type ContentTag } from "@/lib/contentTags";
 import { compressImage } from "@/lib/imageCompress";
 
 type Row = AssetRow & { key: string; thumb?: string; issues: string[]; nn: number };
@@ -36,7 +36,7 @@ function applyDescribed(b: Batch, r: AssetRow, out: Described, knowledge: Knowle
     fileName: proposeFileName({ year: b.year, loc: b.loc, context: r.context as Context | "", descriptor, nn: 0, ext: r.mime === "image/webp" ? "webp" : "jpg" }),
     people,
     scene: out.scene ?? r.scene,
-    tags: uniqueTags(r.tags, proposed),
+    tags: oneScene(uniqueTags(r.tags, proposed), out.scene ?? r.scene),
     ai: { people, scene: out.scene ?? r.scene, tags: proposed },
   };
 }
@@ -149,7 +149,7 @@ export default function BatchPage() {
           descriptor,
           fileName,
           people,
-          tags: uniqueTags(r.tags, add),
+          tags: oneScene(uniqueTags(r.tags, add), r.scene),
           ai: { people: r.ai?.people ?? people, scene: r.ai?.scene ?? r.scene, tags: uniqueTags(seen, add) },
         };
       });
@@ -467,7 +467,7 @@ export default function BatchPage() {
         form.append("filename", finalName);
         form.append("alt", r.alt);
         form.append("folder", batch.targetFolderId);
-        form.append("tags", JSON.stringify(uniqueTags(batch.tags, r.tags)));
+        form.append("tags", JSON.stringify(oneScene(uniqueTags(batch.tags, r.tags), r.scene)));
         const res = await fetch("/api/assets/upload", { method: "POST", body: form });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
