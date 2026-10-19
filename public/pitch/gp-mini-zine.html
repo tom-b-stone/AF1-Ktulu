@@ -56,9 +56,10 @@
   figure.ph { margin:0; position:relative; overflow:hidden; background:#ddd; }
   figure.ph img { width:100%; height:100%; object-fit:cover; display:block; }
   figure.ph figcaption { position:absolute; left:10px; bottom:8px; font-size:13px; color:#fff; background:rgba(0,0,0,.45); padding:3px 8px; border-radius:6px; }
-  img.how { width:100%; border-radius:10px; display:block; }
+  img.how { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; display:block; }
   img.pg { position:absolute; box-shadow:0 26px 60px rgba(0,0,0,.45); border-radius:4px; }
   figure.ph.vid { background:#000; }
+  figure.ph.reel iframe { pointer-events:auto; background:#000; }
   figure.ph iframe { position:absolute; inset:-1px; width:calc(100% + 2px); height:calc(100% + 2px); border:0; pointer-events:none; }
   .stage3d { position:absolute; left:20px; right:60px; top:40px; bottom:180px; perspective:2200px; display:grid; place-items:center; }
   .book3d { --w:340px; --h:481px; --t:14s; position:relative; width:calc(var(--w) * 2); height:var(--h); transform-style:preserve-3d; transform:rotateX(38deg) rotateZ(-8deg) translateY(-10px); }
@@ -98,12 +99,11 @@
         </div>
       <div style="font-size:15px;line-height:1.45;opacity:.55;margin-top:26px">Sources: RIAA 2025 year-end report (via Music Week) · YPulse Going Analog 2026 (via Digital Camera World) · Nielsen BookData 2021/22 (via WEF) · Fujifilm, Apr 2025 · Irish Times, Mar 2026 · Unseen Japan, 2026</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:330px 1fr 330px;gap:16px;margin:-80px -140px -110px 0">
+      <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 300px;gap:16px;margin:-80px -140px -110px 0">
+        <figure class="ph vid reel"><iframe src="https://www.instagram.com/reel/DZ2IodstBB2/embed" title="Instagram reel: mini zine" allow="autoplay; encrypted-media" loading="lazy" scrolling="no"></iframe><figcaption>Instagram reel</figcaption></figure>
+        <figure class="ph vid reel"><iframe src="https://www.tiktok.com/player/v1/7679495825273163021?autoplay=1&amp;loop=1&amp;muted=1&amp;controls=0&amp;description=0&amp;music_info=0&amp;rel=0" title="TikTok @taytoom: mini zine" allow="autoplay; encrypted-media; fullscreen" loading="lazy"></iframe><figcaption>@taytoom (TikTok)</figcaption></figure>
         <figure class="ph"><img src="/pitch/img/minizine-guide.jpg" alt="A folded one-sheet mini zine" /><figcaption>Alzinous, CC BY-SA 4.0</figcaption></figure>
-        <figure class="ph"><img src="/pitch/img/minizines-wall.jpg" alt="Mini zines in a wall holder" /><figcaption>L Maule, CC BY 4.0</figcaption></figure>
-        <figure class="ph vid" style="grid-column:span 2"><iframe src="https://www.youtube-nocookie.com/embed/ab4O9SWNl9g?autoplay=1&amp;mute=1&amp;loop=1&amp;playlist=ab4O9SWNl9g&amp;controls=0&amp;modestbranding=1&amp;playsinline=1&amp;rel=0" title="Austin Kleon: How to make a zine from a single sheet of paper" allow="autoplay; encrypted-media" loading="lazy"></iframe><figcaption>Austin Kleon: one sheet, one cut (YouTube)</figcaption></figure>
         <figure class="ph"><img src="/pitch/img/minizines-table.jpg" alt="Mini zines for sale at a zine fair" /><figcaption>L Maule, CC BY 4.0</figcaption></figure>
-        <figure class="ph vid"><iframe src="https://www.youtube-nocookie.com/embed/HHXA1K9oM7A?autoplay=1&amp;mute=1&amp;loop=1&amp;playlist=HHXA1K9oM7A&amp;controls=0&amp;modestbranding=1&amp;playsinline=1&amp;rel=0" title="Mr OddestBall: How I make my zines" allow="autoplay; encrypted-media" loading="lazy"></iframe><figcaption>Mr OddestBall (YouTube)</figcaption></figure>
       </div>
     </div>
     </section>
@@ -117,16 +117,16 @@
         <h2 style="font-size:84px">GP Mini-Zine.</h2>
         <p class="lead" style="font-size:27px;opacity:.88">One zine per Grand Prix. 13 photos of the weekend from the team, 16 pages, two A4 sheets. Fans print it at home, colour in the cover, scan the code on the back and post it with #ARF1. The download needs a login and unlocks a Team Card.</p>
         <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:30px">
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-01.png" alt="Step 1" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-02.png" alt="Step 2" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-03.png" alt="Step 3" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-04.png" alt="Step 4" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-05.png" alt="Step 5" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-06.png" alt="Step 6" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-07.png" alt="Step 7" />
-          <img class="how" src="/zine/media/audif1_gp-mini-zine_step-08.png" alt="Step 8" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-01.jpg" alt="Step 1" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-02.jpg" alt="Step 2" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-03.jpg" alt="Step 3" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-04.jpg" alt="Step 4" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-05.jpg" alt="Step 5" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-06.jpg" alt="Step 6" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-07.jpg" alt="Step 7" />
+          <img class="how" src="/zine/media/audif1_gp-mini-zine_photo-step-08.jpg" alt="Step 8" />
         </div>
-        <div style="font-size:18px;opacity:.6;margin-top:10px">How it works: two sheets, one cut each, ten minutes.</div>
+        <div style="font-size:18px;opacity:.6;margin-top:10px">How it works: two sheets, one cut each, ten minutes. (AI visuals with our zine pages)</div>
         <div class="eyebrow" style="margin-top:46px">Zines out there</div>
         <div style="display:grid;grid-template-columns:330px 1fr;gap:22px">
           <figure class="ph" style="height:230px;margin:0"><img src="/pitch/img/zinefest-la.jpg" alt="Zines on a table at LA Zine Fest" /><figcaption>LA Zine Fest 2017 · Pizzajono, CC BY-SA 4.0</figcaption></figure>

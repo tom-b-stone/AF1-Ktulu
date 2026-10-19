@@ -6,7 +6,8 @@ import { kvGet, kvSet } from "./kv";
 import { createMediaFolder, listMediaFolders, uploadToCollection } from "./payloadClient";
 import { ZINE_STEPS, type ZineAssets } from "./zinePage";
 
-const KEY = "zine:assets:v2"; // v2: + preview video (3D zine)
+const KEY = "zine:assets:v3"; // v3: how-to steps as photos (hands folding the zine)
+const KEY_V2 = "zine:assets:v2";
 const KEY_V1 = "zine:assets:v1";
 const FOLDER = "GP Mini-Zine";
 
@@ -33,21 +34,33 @@ export async function ensureZineAssets(origin: string, force = false): Promise<Z
     const blob = await res.blob();
     return (await uploadToCollection("media", blob, file, { alt, ...(folder ? { folder } : {}) })).id;
   };
+  const photoSteps = async () => {
+    const out: string[] = [];
+    for (let i = 0; i < ZINE_STEPS.length; i++) {
+      const n = String(i + 1).padStart(2, "0");
+      out.push(await up(`audif1_gp-mini-zine_photo-step-${n}.jpg`, `GP Mini-Zine how-to, step ${i + 1}: ${ZINE_STEPS[i].headline}. Hands folding the printed zine (AI-generated photo).`));
+    }
+    return out;
+  };
+  // v2 assets (teaser, preview video) are reused; only the how-to photos are new
+  const v2raw = force ? null : await kvGet(KEY_V2).catch(() => null);
+  if (v2raw) {
+    const v2 = JSON.parse(v2raw) as ZineAssets;
+    const assets = { ...v2, steps: await photoSteps() };
+    await kvSet(KEY, JSON.stringify(assets));
+    return assets;
+  }
   const preview = await up("audif1_gp-mini-zine_preview.mp4", "Animation: the Audi Revolut F1® Team GP Mini-Zine opens and turns its pages, from the colour-in cover to the colouring book pages");
   // v1 assets (how-to illustrations, fold animation) are reused, not uploaded twice
   const v1raw = force ? null : await kvGet(KEY_V1).catch(() => null);
   if (v1raw) {
     const v1 = JSON.parse(v1raw) as ZineAssets;
-    const assets = { ...v1, preview };
+    const assets = { ...v1, preview, steps: await photoSteps() };
     await kvSet(KEY, JSON.stringify(assets));
     return assets;
   }
   const teaser = await up("audif1_gp-mini-zine_teaser.mp4", "Animation: an A4 sheet of Grand Prix photos is cut and folded into the Audi Revolut F1® Team GP Mini-Zine");
-  const steps: string[] = [];
-  for (let i = 0; i < ZINE_STEPS.length; i++) {
-    const n = String(i + 1).padStart(2, "0");
-    steps.push(await up(`audif1_gp-mini-zine_step-${n}.png`, `GP Mini-Zine how-to, step ${i + 1}: ${ZINE_STEPS[i].headline}. Line illustration.`));
-  }
+  const steps = await photoSteps();
   const assets = { teaser, steps, preview };
   await kvSet(KEY, JSON.stringify(assets));
   return assets;
