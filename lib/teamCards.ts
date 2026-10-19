@@ -332,7 +332,7 @@ export async function cardMeta(cards: CardRecord[]): Promise<Record<string, Card
 
 const ENGAGED = new Set(["q-and-a", "survey", "hot-or-not"]);
 // Texts every card needs; engagement and reward texts only where the card has them.
-export function cardCheck(c: CardRecord): CardCheck {
+export function cardCheck(c: CardRecord, meta?: CardMeta): CardCheck {
   if (c.values.disabled === true) return { missing: [], quick: "Disabled" };
   const missing: string[] = [];
   const need = (key: string) => {
@@ -350,12 +350,16 @@ export function cardCheck(c: CardRecord): CardCheck {
     else if (!de) missing.push(`DE ${f.label}`);
   };
   if (!c.imageUrl) missing.push("Card image");
+  if (!c.mechanic) missing.push("Unlock mechanic");
+  if (!c.rewardType) missing.push("Reward type");
   ["publicTitle", "description", "badgePopupTitle", "revealTitle", "revealDescription", "revealButton", "ctaLabel"].forEach(need);
   if (c.rewardType && c.rewardType !== "noReward") ["rewardDescription", "rewardTeaser"].forEach(need);
   if (ENGAGED.has(c.mechanic ?? "")) {
     if (!c.staging.engagementId) missing.push("Engagement");
     else ["question", "submitLabel", "postTitle", "postMessage"].forEach(need);
   }
+  if (meta && !meta.campaign) missing.push("Campaign tag");
+  if (meta && !meta.type) missing.push("Card type");
   if (!c.staging.pageId || !c.staging.blockId) missing.push("Placement on a page");
   else need("modHeadline");
   return { missing, quick: missing.length ? "Missing" : "Ready" };
