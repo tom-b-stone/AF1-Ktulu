@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import ToolHeader from "./components/ToolHeader";
 import NeuronFx from "./components/NeuronFx";
 import ConnectorOnboarding from "./components/ConnectorOnboarding";
+import FigmaAppLinks from "./components/FigmaAppLinks";
 import { SidebarProvider } from "./components/SidebarSlot";
 import SessionProviderWrapper from "./components/SessionProviderWrapper";
 import "./globals.css";
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               under it, the main column takes the rest. */}
           <NeuronFx />
           <ConnectorOnboarding />
+          <FigmaAppLinks />
           <ToolHeader />
           <div style={{ display: "flex", minHeight: "calc(100vh - 64px)" }}>
             <Sidebar />

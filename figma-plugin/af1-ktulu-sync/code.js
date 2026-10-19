@@ -390,8 +390,24 @@ async function moduleInstance(b, desk) {
   if (!def) return null;
   var variant = (def.variantByBg && b.bg && def.variantByBg[b.bg]) || def.variant;
   var comp = def.local ? await localComponent(def.local) : await variantOf(def.key, variant);
-  await preloadFonts(comp);
-  return comp.createInstance();
+  var missing = await preloadFonts(comp);
+  var inst = comp.createInstance();
+  if (missing.length) await replaceMissingFonts(inst);
+  return inst;
+}
+// a font that is not installed (e.g. Audi TRN) blocks moving the instance: swap it for Audi Type first
+async function replaceMissingFonts(node) {
+  var texts = textNodes(node);
+  for (var i = 0; i < texts.length; i++) {
+    var segs = texts[i].getStyledTextSegments(["fontName"]);
+    for (var j = 0; j < segs.length; j++) {
+      if (await loadFont(segs[j].fontName)) continue;
+      var bold = /display|extended|bold/i.test(segs[j].fontName.family + " " + segs[j].fontName.style);
+      var nf = { family: "Audi Type", style: bold ? "Extended Normal" : "Wide Normal" };
+      if (!(await loadFont(nf))) { nf = { family: "Inter", style: bold ? "Bold" : "Regular" }; await loadFont(nf); }
+      try { texts[i].setRangeFontName(segs[j].start, segs[j].end, nf); } catch (e) { log("⚠ font " + segs[j].fontName.family + ": " + (e && e.message ? e.message : e)); }
+    }
+  }
 }
 
 async function placeholder(b, desk) {
@@ -415,6 +431,12 @@ async function buildPageFrame(sec, p, x, y, desk) {
     node.name = (i < 9 ? "0" : "") + (i + 1) + " " + b.blockType + " · " + b.id;
     writeData(node, { type: "block", pageId: p.id, blockId: b.id, blockType: b.blockType, badge: b.badge || "", fields: tagFields(b.fields), last: {}, imgs: {} });
     await applyFields(node, valuesOf(b.fields), true);
+    // carousels / galleries: tiles without a CMS item are hidden (no sample images)
+    if (/^(carousel|carousel-tags|gallery)$/.test(b.blockType)) {
+      var nItems = 0;
+      b.fields.forEach(function (f) { var m = /(?:ImageItem|Tile |Rectangle 16:9@)(\d+)/.exec(f.layer); if (m) nItems = Math.max(nItems, Number(m[1]) + (/@/.test(m[0]) ? 1 : 0)); });
+      node.findAll(function (x) { var m = /^\.?(?:ImageItem|Grid Tile 0?)(\d+)$/.exec(x.name); return m && Number(m[1]) > nItems; }).forEach(function (x) { x.visible = false; });
+    }
     if (b.blockType === "list-section") for (var k = 1; k <= 6; k++) { var lf = b.fields.filter(function (x) { return x.layer === "Item " + k + " · Label"; })[0]; var it = node.findOne(function (x) { return x.name === "Item " + k && x.type === "FRAME"; }); if (it) it.visible = !!(lf && lf.value); }
   }
   return fr;
@@ -539,7 +561,7 @@ async function buildSection(p, num, card, group, isMain, mainUrl, ov) {
       var at = fr.children.filter(function (c) { var d = readData(c); return d && d.badge === card.badgeId; })[0];
       var cy = at ? Y + at.y + Math.min(at.height / 2, 400) : Y + 400;
       var j = await journey(sec, card, { x: 200, w: 375 + 12, cy: cy }, Y);
-      await label(sec, "→ Team Card journey of " + (card.title || "this card") + " · only the reward branch it uses (" + (card.rewardType || "no reward") + ")", 28, "Regular", ON_DARK, COL0, 190);
+      await label(sec, "→ Team Card journey of " + (card.title || "this card") + " · only the reward branch it uses: " + ({ couponCode: "voucher code", raffleSignup: "raffle", downloadAsset: "download" }[card.rewardType] || (/download/i.test(card.rewardType || "") ? "download" : "no reward / link")), 28, "Regular", ON_DARK, COL0, 190);
       right = Math.max(right, j.right); bottom = Math.max(bottom, j.bottom);
     }
     sec.resizeWithoutConstraints(right + 300, bottom + 400);

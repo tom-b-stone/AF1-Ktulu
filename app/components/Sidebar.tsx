@@ -55,7 +55,7 @@ const SIDEBARS: Record<string, Section[]> = {
     {
       title: "Open elsewhere",
       entries: [
-        { href: "https://www.figma.com/design/rGxt5J0qhiK759uEbaKgTO/WorkingDoc?node-id=692-56", label: "Figma file", note: "↗", hint: "All pages and card journeys" },
+        { href: "https://www.figma.com/design/rGxt5J0qhiK759uEbaKgTO/WorkingDoc?node-id=692-56", label: "Figma file", note: "↗", hint: "Opens in the Figma app" },
         { href: "https://staging.audif1team.com/cms/admin/collections/badges", label: "Cards in the CMS", note: "↗", hint: "Staging admin" },
       ],
     },

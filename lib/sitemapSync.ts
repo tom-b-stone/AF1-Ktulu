@@ -159,7 +159,7 @@ function blockFields(pageId: string, s: Json): Field[] {
       if (c && typeof c.label === "string") text(`${arr}.${i}.label`, `@btn:${i}`, c.label);
     });
   if (Array.isArray(s.carouselItems))
-    s.carouselItems.slice(0, 4).forEach((it: Json, i: number) => {
+    s.carouselItems.slice(0, 5).forEach((it: Json, i: number) => {
       const ci = it?.carouselImage;
       if (!ci) return;
       const n = i + 1;
@@ -177,13 +177,16 @@ function blockFields(pageId: string, s: Json): Field[] {
     });
   const bgMedia = s.container?.background?.imageSettings?.media;
   if (bgMedia && s.container?.background?.type === "image") {
-    if (t === "hero") image("container.background.imageSettings.media", "Rectangle 9:16", bgMedia);
-    if (t === "call-to-action") image("container.background.imageSettings.media", "Frame 48099931", bgMedia);
+    if (t === "hero") image("container.background.imageSettings.media", "Rectangle 9:16|Heroimage 16:9 Fullsize", bgMedia);
+    if (t === "call-to-action") image("container.background.imageSettings.media", "Frame 48099931|Frame", bgMedia);
   }
   if (t === "teaser" && s.image) image("image", "Rectangle 28", s.image);
   if (t === "hot-spot" && (s.mobileImage || s.image)) image(s.mobileImage ? "mobileImage" : "image", "Images", s.mobileImage || s.image);
-  if (t === "gallery" && Array.isArray(s.images) && s.images[0]?.image?.background?.imageSettings?.media)
-    image("images.0.image.background.imageSettings.media", "Rectangle 16:9", s.images[0].image.background.imageSettings.media);
+  if (t === "gallery" && Array.isArray(s.images))
+    s.images.slice(0, 6).forEach((im: Json, i: number) => {
+      const m = im?.image?.background?.imageSettings?.media;
+      if (m) image(`images.${i}.image.background.imageSettings.media`, `Rectangle 16:9@${i}`, m);
+    });
   return out;
 }
 
@@ -275,6 +278,17 @@ export async function loadModel(c: Campaign): Promise<Model> {
       if (b.blockType === "single-card-showcase") b.fields.push(badgeField(b.badge!, bd, "publicTitle", "Name / Year"), badgeField(b.badge!, bd, "badgeImage", "Badge/Image", "image"));
       if (b.blockType === "badge-engagement-teaser") b.fields.push(badgeField(b.badge!, bd, "badgeImage", "Badge Image", "image"));
     }
+  // tag carousels show the newest images with the module's content tags (read-only in Figma)
+  for (const p of pages)
+    for (const b of p.blocks) {
+      if (b.blockType !== "carousel-tags") continue;
+      const sec = (docs.find((d) => d.id === p.id)?.sections ?? []).find((x: Json) => x.id === b.id);
+      const tags = [...new Set(((sec?.carouselItems?.contentTagsList ?? []) as Json[]).flatMap((x) => (x.contentTags ?? []).map(idOf)))];
+      if (!tags.length) continue;
+      const tw = encodeURIComponent(JSON.stringify({ and: [{ contentTags: { in: tags } }, { mimeType: { like: "image" } }] }));
+      const tr = await stg(`/media?where=${tw}&sort=-createdAt&limit=5&depth=0`).catch(() => ({ docs: [] }));
+      (tr.docs ?? []).forEach((m: Json, i: number) => b.fields.push({ key: `${p.id}|${b.id}|_figma.tagImage.${i}`, path: `_figma.tagImage.${i}`, layer: `ImageItem${i + 1}>ImageContainer`, value: m.id, kind: "image", readonly: true }));
+    }
   // the engagement inside the teaser module: its question replaces the sample Hot or Not
   const engIds = [...new Set(pages.flatMap((p) => p.blocks.map((b) => b.engagement).filter(Boolean) as string[]))];
   if (engIds.length) {
@@ -288,6 +302,8 @@ export async function loadModel(c: Campaign): Promise<Model> {
         if (!e) continue;
         const sh = (name: string, layer: string, value: string): Field => ({ key: `engagement:${e.id}|eng|_figma.${name}`, path: `_figma.${name}`, layer, value, kind: "text", readonly: true });
         b.fields.push(sh("question", "Would you wear those Shoes to the paddock?", str(e.questions?.[0]?.text)), sh("tag", "Stylecheck", ""), sh("type", "Hot or Not", TYPE[str(e.engagementType)] ?? cap(str(e.engagementType))));
+        const bg = e.background?.imageSettings?.media;
+        if (bg) b.fields.push({ key: `engagement:${e.id}|eng|_figma.background`, path: "_figma.background", layer: "HoN Desktop 799 - 1199px - Dark", value: idOf(bg), kind: "image", readonly: true });
       }
   }
   // groups, one card per group (the badge most used on its pages)
@@ -305,7 +321,7 @@ export async function loadModel(c: Campaign): Promise<Model> {
       return { badgeId: g.badgeId!, title: str(b.publicTitle || b.title), rewardType: str(b.rewardType), isTimebound: Boolean(b.isTimebound), group: g.key, states: cardStates(g.badgeId!, b, c.race, c.season) };
     });
   // the Team Cards grid shows the campaign's cards
-  const gridCards = cards.slice(0, 6);
+  const gridCards = cards.slice(0, 8);
   for (const p of pages)
     for (const b of p.blocks)
       if (b.blockType === "badges-grid")
