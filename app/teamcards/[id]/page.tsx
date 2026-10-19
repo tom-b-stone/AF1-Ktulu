@@ -90,11 +90,12 @@ export default function EditCard() {
   const [card, setCard] = useState<Card | null>(null);
   const [tpl, setTpl] = useState<Templates | null>(null);
   const [others, setOthers] = useState<OtherCard[]>([]);
+  const [row, setRow] = useState<Json | null>(null);
   const [lex, setLex] = useState<LexEntry[]>([]);
   const [initial, setInitial] = useState<Values>({});
   const [vals, setVals] = useState<Values>({});
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState("page");
+  const [step, setStep] = useState("overview");
   const [whole, setWhole] = useState(false);
   const [mode, setMode] = useState<Mode>("en");
   const [scale, setScale] = useState(0.62);
@@ -122,6 +123,7 @@ export default function EditCard() {
         setCard(c.card);
         setTpl(t);
         setOthers((all.cards ?? []).filter((x: OtherCard) => x.id !== c.card.id));
+        setRow((all.cards ?? []).find((x: Json) => x.id === c.card.id) ?? null);
         setLex(lx.entries ?? []);
       })
       .catch((e) => setError(e.message));
@@ -470,6 +472,122 @@ export default function EditCard() {
           })}
         </div>
       )}
+
+      {/* ---- overview: smart summary ---- */}
+      {step === "overview" && (() => {
+        const MECH: Record<string, string> = { "q-and-a": "text answer", survey: "multiple choice", "hot-or-not": "hot or not", page: "page visit", link: "link" };
+        const REWARD: Record<string, string> = { noReward: "no reward", raffleSignup: "a raffle", couponCode: "a voucher" };
+        const check: { missing: string[]; quick: string } = row?.check ?? { missing: [], quick: "Ready" };
+        const meta: Json = row?.meta ?? {};
+        const kindLabel = MECH[row?.mechanic ?? ""] ?? (kind === "qa" ? "text answer" : kind === "hot" ? "hot or not" : "multiple choice");
+        const reward = REWARD[row?.rewardType ?? ""];
+        const campaign = meta.campaign || row?.raceLabel || "";
+        const filledEn = allKeys.filter((k) => textOf(k, "en").trim()).length;
+        const filledDe = allKeys.filter((k) => textOf(k, "de").trim()).length;
+        const laneSteps = STEPS.filter((x) => x.lanes.length).map((x) => ({ x, ...stepCount(x.key) }));
+        const issueTotal = laneSteps.reduce((n, y) => n + y.issues, 0);
+        const firstIssue = laneSteps.find((y) => y.issues > 0);
+        const tone =
+          check.quick === "Ready" ? { bg: "rgba(46,125,79,.18)", fg: "#7fd6a2", label: "Ready" }
+          : check.quick === "Disabled" ? { bg: "rgba(255,255,255,.06)", fg: C.mute, label: "Disabled" }
+          : { bg: "rgba(227,62,26,.16)", fg: "#ff9a84", label: "Needs attention" };
+        const sentences = [
+          `${card.name} is a ${kindLabel} card${reward ? ` with ${reward}` : ""}${campaign ? ` in ${campaign}` : ""}.`,
+          check.quick === "Disabled"
+            ? "It is switched off, so the CMS does not link card, engagement and module yet."
+            : check.missing.length
+              ? `${check.missing.length === 1 ? "One thing is" : `${check.missing.length} things are`} still missing in the setup: ${check.missing.join(", ")}.`
+              : "The setup is complete.",
+          `${filledEn} of ${allKeys.length} texts are filled in English and ${filledDe} in German${missingDe.length ? `, so ${missingDe.length} German ${missingDe.length === 1 ? "text is" : "texts are"} still open` : ""}${issueTotal ? `. The copy check flags ${issueTotal} ${issueTotal === 1 ? "issue" : "issues"}` : ""}.`,
+          ...(changed.length ? [`You have ${changed.length} unsaved ${changed.length === 1 ? "change" : "changes"}.`] : []),
+        ];
+        const next = firstIssue
+          ? { label: `Start with step ${STEPS.indexOf(firstIssue.x) + 1}: ${firstIssue.x.title}`, why: `${firstIssue.issues} ${firstIssue.issues === 1 ? "issue" : "issues"} there.`, go: firstIssue.x.key, de: false }
+          : missingDe.length
+            ? { label: "Fill the German texts", why: "Opens the page step in German.", go: "page", de: true }
+            : check.missing.length
+              ? { label: "Fix the setup in the CMS", why: "The missing items above are set in Payload, not in the texts.", go: "", de: false }
+              : { label: "Walk through the journey", why: "Nothing urgent. Check the screens, then review and push to staging.", go: "page", de: false };
+        const facts: [string, string][] = [
+          ["Type", meta.core ? `Core · ${meta.type ?? ""}`.replace(/ · $/, "") : meta.type ?? "Unknown"],
+          ["Task", kindLabel],
+          ["Reward", reward ?? "Not set"],
+          ["Campaign", campaign || "None"],
+          ["Race", meta.race ?? row?.raceLabel ?? "None"],
+          ["Partner", meta.partner ?? "None"],
+          ["Last change", row?.log?.[0] ? `${row.log[0].summary} · ${new Date(row.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "No changes logged"],
+        ];
+        return (
+          <div style={{ padding: "22px 24px 60px", maxWidth: 980, display: "grid", gap: 16 }}>
+            <section aria-label="Summary" style={{ borderRadius: 18, background: C.panel, border: `1px solid ${C.line}`, padding: "20px 22px", display: "grid", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: tone.bg, color: tone.fg, fontWeight: 600 }}>
+                  {tone.label}{check.quick === "Missing" ? ` · ${check.missing.length}` : ""}
+                </span>
+                <span style={{ fontSize: 12, color: C.mute }}>{card.id}</span>
+              </div>
+              <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.6, maxWidth: 760 }}>{sentences.join(" ")}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 4 }}>
+                <button
+                  style={{ ...btn(true), height: 36, fontWeight: 600 }}
+                  onClick={() => {
+                    if (!next.go) { if (card.links.badge) window.open(card.links.badge, "_blank"); return; }
+                    if (next.de) setMode("de");
+                    setStep(next.go);
+                    setWhole(false);
+                    setStation(undefined);
+                  }}
+                >
+                  {next.label} <Icon d={I.right} size={14} />
+                </button>
+                <span style={{ fontSize: 12.5, color: C.mute }}>{next.why}</span>
+              </div>
+            </section>
+
+            {check.missing.length > 0 && (
+              <section aria-label="Missing in the setup" style={{ borderRadius: 18, border: `1px solid rgba(227,62,26,.35)`, background: "rgba(227,62,26,.06)", padding: "16px 20px" }}>
+                <h2 style={{ margin: "0 0 8px", fontSize: 13.5, fontWeight: 650 }}>Missing in the setup</h2>
+                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4, fontSize: 13.5, color: "#ffb5a6" }}>
+                  {check.missing.map((m) => <li key={m}>{m}</li>)}
+                </ul>
+              </section>
+            )}
+
+            <section aria-label="Journey" style={{ borderRadius: 18, border: `1px solid ${C.line}`, padding: "16px 20px", display: "grid", gap: 10 }}>
+              <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 650 }}>The journey, step by step</h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+                {laneSteps.map(({ x, issues, changed: ch }) => {
+                  const L = LANES[x.lanes[0]];
+                  return (
+                    <button
+                      key={x.key}
+                      onClick={() => { setStep(x.key); setWhole(false); setStation(undefined); }}
+                      style={{ textAlign: "left", cursor: "pointer", borderRadius: 14, border: `1px solid ${C.line}`, borderLeft: `3px solid ${L.edge}`, background: L.tint, color: C.fg, padding: "12px 14px", display: "grid", gap: 4 }}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{STEPS.indexOf(x) + 1}. {x.title}</span>
+                      <span style={{ fontSize: 12, color: issues ? "#e06c5b" : C.mute }}>
+                        {issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "No issues"}{ch ? ` · ${ch} changed` : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section aria-label="Details" style={{ borderRadius: 18, border: `1px solid ${C.line}`, padding: "16px 20px" }}>
+              <h2 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 650 }}>Details</h2>
+              <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "140px 1fr", rowGap: 8, columnGap: 14, fontSize: 13.5 }}>
+                {facts.map(([k, v]) => (
+                  <div key={k} style={{ display: "contents" }}>
+                    <dt style={{ color: C.mute }}>{k}</dt>
+                    <dd style={{ margin: 0 }}>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          </div>
+        );
+      })()}
 
       {/* ---- settings ---- */}
       {step === "settings" && (

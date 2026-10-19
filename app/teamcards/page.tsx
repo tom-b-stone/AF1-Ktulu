@@ -149,34 +149,26 @@ export default function Page() {
     {
       key: "check",
       header: "Status",
-      width: "200px",
+      width: "340px",
       sortable: true,
-      sortValue: (c) => (c.check.quick === "Missing" ? 0 : c.check.quick === "Ready" ? 1 : 2),
+      sortValue: (c) => (c.check.quick === "Missing" ? 0 : c.check.quick === "Ready" ? 1 : 2) * 100 - c.check.missing.length,
       headerExtra: <HeaderSelect label="status" value={fQuick} options={opts.quick} onChange={setFQuick} />,
       cell: (c) => {
         const t = QUICK_TONE[c.check.quick];
         return (
-          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>
-            {t.label}
-            {c.check.quick === "Missing" ? ` · ${c.check.missing.length}` : ""}
-          </span>
+          <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <span style={{ justifySelf: "start", fontSize: 11, padding: "2px 8px", borderRadius: 999, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>
+              {t.label}
+              {c.check.quick === "Missing" ? ` · ${c.check.missing.length}` : ""}
+            </span>
+            {c.check.missing.length > 0 && (
+              <div title={c.check.missing.join(", ")} style={{ fontSize: 12, color: "#ff9a84", lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                {c.check.missing.join(" · ")}
+              </div>
+            )}
+          </div>
         );
       },
-    },
-    {
-      key: "missing",
-      header: "Attention",
-      width: "300px",
-      sortable: true,
-      sortValue: (c) => c.check.missing.length,
-      cell: (c) =>
-        c.check.missing.length ? (
-          <div title={c.check.missing.join(", ")} style={{ fontSize: 12, color: "#ff9a84", lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {c.check.missing.join(" · ")}
-          </div>
-        ) : (
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>{c.check.quick === "Disabled" ? "Card is disabled" : "Nothing missing"}</span>
-        ),
     },
     {
       key: "type",
@@ -206,8 +198,6 @@ export default function Page() {
         </div>
       ),
     },
-    { key: "status", header: "Tracker", width: "100px", sortable: true, cell: (c) => <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, border: "1px solid var(--border-2)" }}>{c.status}</span> },
-    { key: "updatedAt", header: "Last change", width: "170px", sortable: true, sortValue: (c) => c.log[0]?.at ?? c.updatedAt, cell: (c) => (c.log[0] ? <div style={{ fontSize: 12 }}><div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.log[0].summary}</div><div style={{ color: "var(--muted)" }}>{new Date(c.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div></div> : null) },
     { key: "links", header: "Staging", width: "190px", cell: (c) => <span style={{ fontSize: 12, whiteSpace: "nowrap" }}><a href={c.links.badge} target="_blank" rel="noreferrer">Card ↗</a>{c.links.engagement && <> · <a href={c.links.engagement} target="_blank" rel="noreferrer">Engagement ↗</a></>}{c.links.page && <> · <a href={c.links.page} target="_blank" rel="noreferrer">Page ↗</a></>}</span> },
     { key: "edit", header: "", width: "80px", cell: (c) => <Link className="btn btn-primary" href={`/teamcards/${c.id}`}>Edit</Link> },
   ];

@@ -17,6 +17,7 @@ export const LANES: Record<Lane, { title: string; text: string; tint: string; ed
 };
 
 export const STEPS: Step[] = [
+  { key: "overview", title: "Overview", lanes: [], talk: "Where this card stands: what it is, what is missing and where to start." },
   { key: "page", title: "Page", lanes: ["page"], talk: "Where fans meet the card: the module on the activation page with the task inside." },
   { key: "out", title: "Logged out", lanes: ["out"], talk: "What a visitor without an account sees after the task, and the card that asks them to log in." },
   { key: "in", title: "Logged in", lanes: ["in"], talk: "What a member sees after the task, and the moment the card is collected." },
