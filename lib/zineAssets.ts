@@ -6,7 +6,8 @@ import { kvGet, kvSet } from "./kv";
 import { createMediaFolder, listMediaFolders, uploadToCollection } from "./payloadClient";
 import { ZINE_FANS, ZINE_STEPS, type ZineAssets } from "./zinePage";
 
-const KEY = "zine:assets:v4"; // v4: fan inspiration photos + share video
+const KEY = "zine:assets:v5"; // v5: horizontal background video for the share box
+const KEY_V4 = "zine:assets:v4"; // v4: fan inspiration photos + share video
 const KEY_V3 = "zine:assets:v3"; // v3: how-to steps as photos (hands folding the zine)
 const KEY_V2 = "zine:assets:v2";
 const KEY_V1 = "zine:assets:v1";
@@ -49,7 +50,14 @@ export async function ensureZineAssets(origin: string, force = false): Promise<Z
     for (const f of ZINE_FANS) out.push({ id: await up(`audif1_gp-mini-zine_fan-${f.slug}.jpg`, `${f.alt} (AI-generated example)`), gp: f.gp });
     return out;
   };
-  const shareVideo = () => up("audif1_gp-mini-zine_share.mp4", "Video: a fan flips through her collection of GP Mini-Zines from different Grand Prix (AI-generated)");
+  // share box background: wide flat lay of zines from many Grand Prix, text-safe centre
+  const shareVideo = () => up("audif1_gp-mini-zine_share-bg.mp4", "Video: GP Mini-Zines from different Grand Prix on a desk (AI-generated)");
+  const v4raw = force ? null : await kvGet(KEY_V4).catch(() => null);
+  if (v4raw) {
+    const assets: ZineAssets = { ...(JSON.parse(v4raw) as ZineAssets), share: await shareVideo() };
+    await kvSet(KEY, JSON.stringify(assets));
+    return assets;
+  }
   // v3 assets are reused; only the fan photos and the share video are new
   const v3raw = force ? null : await kvGet(KEY_V3).catch(() => null);
   if (v3raw) {

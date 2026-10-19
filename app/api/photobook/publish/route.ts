@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { listDraftPages, patchDraftSections, upsertDraftPage } from "@/lib/payloadClient";
+import { upsertDraftPage } from "@/lib/payloadClient";
+import { refreshCollections, setZineMockup } from "@/lib/zineCollection";
 import {
-  buildCollectionSection,
   buildZineBottom,
   buildZineMeta,
   buildZineSections,
-  withCollection,
-  zineEntryOf,
   zinePageSlug,
   zinePageTitle,
   type ZineAssets,
-  type ZineEntry,
   type ZineIds,
   type ZineMeta,
 } from "@/lib/zinePage";
@@ -28,7 +25,7 @@ import { ZINE_SITE } from "@/lib/photobook";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type Body = { meta: ZineMeta; coverId: string; pdfs: ZineIds["pdfs"] };
+type Body = { meta: ZineMeta; coverId: string; mockupId?: string; pdfs: ZineIds["pdfs"] };
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -57,13 +54,9 @@ export async function POST(req: NextRequest) {
 
     // The collection: every zine page on the CMS (this one included), newest first.
     try {
-      const pages = await listDraftPages("gp-mini-zine-");
-      const entries = pages.map(zineEntryOf).filter((e): e is ZineEntry => !!e);
-      if (!entries.some((e) => e.pageId === page.id)) entries.unshift({ pageId: page.id, gpName: m.gpName, year: String(m.year), coverMedia: b.coverId });
-      for (const p of [{ id: page.id, sections }, ...pages.filter((x) => x.id !== page.id && zineEntryOf(x))]) {
-        await patchDraftSections(p.id, withCollection((p.sections ?? []) as Record<string, unknown>[], buildCollectionSection(entries, p.id)));
-      }
-      steps.push(`collection slider: ${entries.length} edition${entries.length === 1 ? "" : "s"}`);
+      if (b.mockupId) await setZineMockup(zinePageSlug(m), b.mockupId);
+      const n = await refreshCollections({ id: page.id, slug: zinePageSlug(m), sections, entry: { pageId: page.id, slug: zinePageSlug(m), gpName: m.gpName, year: String(m.year), coverMedia: b.mockupId ?? b.coverId } });
+      steps.push(`collection slider: ${n} edition${n === 1 ? "" : "s"}`);
     } catch (e) {
       steps.push(`collection slider skipped (${e instanceof Error ? e.message.slice(0, 80) : "error"})`);
     }

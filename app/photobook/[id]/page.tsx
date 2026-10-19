@@ -9,6 +9,7 @@ import ZineFlip from "../ZineFlip";
 import { bookStore } from "@/lib/photobookStore";
 import { BOOK_PAGES, INSIDE_PHOTOS, SHEETS, gpHashtag, pageContent, shareUrl, slugFor, zinePageUrl, type Book, type BookPhoto } from "@/lib/photobook";
 import { ZINE_VARIANTS, buildPdf, renderPage, type ZineVariant } from "@/lib/photobookRender";
+import { zineMockup } from "@/lib/zineMockup";
 import { compressImage, thumbnail } from "@/lib/imageCompress";
 import { newId } from "@/lib/batchStore";
 
@@ -330,13 +331,21 @@ export default function PhotobookEditor() {
       if (!cover) throw new Error("cover photo missing in this browser");
       const base = `audif1_${book.year}_${book.loc.toUpperCase()}_GP_mini-zine`;
       const coverId = await upload(cover, `${base}_cover.jpg`, `Cover of the Audi Revolut F1® Team GP Mini-Zine for the ${book.gpName} ${book.year}`);
+      // collection slider image: the rendered cover on a slightly 3D booklet
+      let mockupId: string | undefined;
+      try {
+        const mock = await zineMockup(await renderPage(book, 1, getPhoto, origin));
+        mockupId = await upload(mock, `${base}_collection.jpg`, `The Audi Revolut F1® Team GP Mini-Zine for the ${book.gpName} ${book.year}, cover on a booklet`);
+      } catch {
+        /* the slider falls back to the cover photo */
+      }
       const ids: Partial<Record<ZineVariant, string>> = {};
       for (const v of ZINE_VARIANTS) {
         const p = pdfs[v.key];
         if (p) ids[v.key] = await upload(p.blob, `${base}_${v.file}.pdf`, `GP Mini-Zine ${book.gpName} ${book.year}, ${v.label} (print PDF)`);
       }
       const meta = { slug: book.slug, gpName: book.gpName, city: book.city, loc: book.loc, year: book.year, dateLabel: book.dateLabel, hashtags: book.hashtags, instagram: book.instagram };
-      const res = await fetch("/api/photobook/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meta, coverId, pdfs: ids }) });
+      const res = await fetch("/api/photobook/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meta, coverId, mockupId, pdfs: ids }) });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`${j.error ?? res.status}${j.steps?.length ? ` (done: ${j.steps.join(", ")})` : ""}`);
       await save({ ...book, stagingPageId: j.pageId, stagingPageUrl: j.pageAdminUrl });

@@ -32,7 +32,7 @@ export const ZINE_FANS: { slug: string; gp: string; alt: string }[] = [
 export type ZineIds = { coverMedia: string; pageUrl: string; pdfs: { photo?: string; diy?: string; colouring?: string } };
 
 // One edition in "The collection" slider: a zine page already on the CMS.
-export type ZineEntry = { pageId: string; gpName: string; year: string; coverMedia: string };
+export type ZineEntry = { pageId: string; slug: string; gpName: string; year: string; coverMedia: string };
 
 // Same wording on the website slider and in the PDF folding guide.
 export const ZINE_STEPS: { headline: string; copy: string }[] = [
@@ -77,7 +77,7 @@ export function zineEntryOf(p: { id: string; slug: string; title?: string; secti
   const coverMedia = typeof media === "string" ? media : (media as { id?: string } | undefined)?.id;
   const t = (p.title ?? "").match(/\|\s*(.+?)\s+(\d{4})\s*$/);
   if (!coverMedia || !t) return null;
-  return { pageId: p.id, gpName: t[1], year: t[2], coverMedia };
+  return { pageId: p.id, slug: p.slug, gpName: t[1], year: t[2], coverMedia };
 }
 
 // "The collection": every GP Mini-Zine built so far, newest first.
