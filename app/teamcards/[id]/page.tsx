@@ -32,7 +32,8 @@ type OtherCard = { id: string; name: string; values: Record<string, Json> };
 type LexEntry = { id: string; field: string; en: string; de: string; uses: number; saved: boolean; cards: string[] };
 type Templates = Record<string, Record<string, { label: string; html: string; popup: boolean }>>;
 type Mode = "en" | "de" | "stack" | "side";
-type Ask = { key: string; lang: Loc; from: string; to: string; journey: string[]; campaign: { id: string; name: string }[]; global: { id: string; name: string; value: string }[]; stage: 0 | 1 | 2 };
+type Hit = { id: string; card: string | null; cardName: string; key: string; locale: Loc; before: string; after: string; group: 0 | 1 | 2 };
+type Ask = { key: string; lang: Loc; from: string; to: string; oldP: string; newP: string; hits: Hit[]; stage: 0 | 1 | 2 };
 type Cross = Record<string, { key: string; locale: Loc; value: string }[]>;
 
 const C = { bg: "#0c0c0e", panel: "#141417", line: "#26262b", line2: "#34343b", fg: "#e7e5e4", mute: "#8b8a91", lava: "#ff2d00", ok: "#6fcf7c" };
@@ -47,6 +48,30 @@ function similar(a: string, b: string) {
   const inter = [...A].filter((w) => B.has(w)).length;
   return inter / Math.max(A.size, B.size) >= 0.8;
 }
+// the part of a text that changed, widened to whole words ("Claim now" → "Collect now": "Claim" → "Collect")
+function phraseDiff(a: string, b: string) {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  let j = 0;
+  while (j < a.length - i && j < b.length - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++;
+  const w = (c?: string) => !!c && /[\p{L}\p{N}]/u.test(c);
+  while (i > 0 && w(a[i - 1]) && (w(a[i]) || w(b[i]))) i--;
+  while (j > 0 && w(a[a.length - j]) && (w(a[a.length - j - 1]) || w(b[b.length - j - 1]))) j--;
+  // a short single word ("now") would match far too much: take the word before it as context
+  if (!/\s/.test(a.slice(i, a.length - j).trim()) && a.slice(i, a.length - j).trim().length < 5 && i > 0) {
+    let k = i;
+    while (k > 0 && !w(a[k - 1])) k--;
+    while (k > 0 && w(a[k - 1])) k--;
+    i = k;
+  }
+  const oldP = a.slice(i, a.length - j).trim(), newP = b.slice(i, b.length - j).trim();
+  return oldP.length >= 2 ? { oldP, newP } : { oldP: a, newP: b };
+}
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const phraseRe = (p: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${escRe(p)}(?=$|[^\\p{L}\\p{N}])`, "giu");
+const hasPhrase = (text: string, p: string) => !!p && phraseRe(p).test(text);
+const swapPhrase = (text: string, p: string, n: string) => text.replace(phraseRe(p), (_m, pre) => pre + n);
+const CTA_KEYS = ["ctaLabel", "revealButton", "submitLabel"];
 const keysIn = (html: string) => [...new Set([...html.matchAll(/data-k="([^"]+)"/g)].map((m) => m[1]))];
 const labelOf = (k: string) => fieldByKey(k)?.label ?? k;
 const isText = (f?: FieldDef) => !!f && (f.kind === "text" || f.kind === "textarea");
@@ -186,25 +211,37 @@ export default function EditCard() {
     return fieldIssues(f, l, textOf(k, l), l === "en" ? textOf(k, "de") : undefined).map((x) => x.replace(`${f.label}: `, ""));
   };
 
-  // after a text change: where else does the old text appear?
+  // after a text change: where else does the changed phrase appear? (this card, the campaign, other campaigns)
   const checkScope = useCallback(
     (k: string, l: Loc) => {
       const from = initial[k]?.[l] ?? "";
       const to = vals[k]?.[l] ?? "";
       const sig = `${k}|${l}|${to}`;
       if (!from.trim() || from === to || asked[sig]) return;
-      const journey = Object.keys(initial).filter((x) => x !== k && norm(initial[x]?.[l] ?? "") === norm(from) && norm(vals[x]?.[l] ?? "") === norm(from));
-      const f = FIELDS.find((x) => x.key === k);
+      const { oldP, newP } = phraseDiff(from, to);
+      const whole = oldP === from;
+      const hits: Hit[] = [];
+      const match = (text: string) => (whole ? norm(text) === norm(from) : hasPhrase(text, oldP));
+      const next = (text: string) => (whole ? to : swapPhrase(text, oldP, newP));
+      // this card: every other text (page, task, popups, card)
+      for (const x of Object.keys(vals)) {
+        if (x === k || x.startsWith("meta:") || !isText(fieldByKey(x))) continue;
+        const t = vals[x]?.[l] ?? "";
+        if (t && match(t)) hits.push({ id: `self|${x}`, card: null, cardName: "This card", key: x, locale: l, before: t, after: next(t), group: 0 });
+      }
+      // other cards: all their text fields
       const prefix = card?.id.split("-")[0] ?? "";
-      const val = (o: OtherCard) => {
-        const v = o.values[k];
-        return typeof v === "object" && v ? String(v[l] ?? "") : String(v ?? "");
-      };
-      const campaign = f ? others.filter((o) => o.id.split("-")[0] === prefix && norm(val(o)) === norm(from)).map((o) => ({ id: o.id, name: o.name })) : [];
-      const global = f ? others.filter((o) => o.id.split("-")[0] !== prefix && similar(val(o), from)).map((o) => ({ id: o.id, name: o.name, value: val(o) })) : [];
-      if (!journey.length && !campaign.length && !global.length) return;
+      for (const o of others)
+        for (const f of FIELDS) {
+          if (!isText(f) || !f.localized) continue;
+          const v = o.values[f.key];
+          const t = v && typeof v === "object" ? String(v[l] ?? "") : "";
+          if (t && match(t)) hits.push({ id: `${o.id}|${f.key}`, card: o.id, cardName: o.name, key: f.key, locale: l, before: t, after: next(t), group: o.id.split("-")[0] === prefix ? 1 : 2 });
+        }
+      if (!hits.length) return;
       setAsked((a) => ({ ...a, [sig]: true }));
-      setAsk({ key: k, lang: l, from, to, journey, campaign, global, stage: journey.length ? 0 : campaign.length ? 1 : 2 });
+      const first = ([0, 1, 2] as const).find((g) => hits.some((h) => h.group === g))!;
+      setAsk({ key: k, lang: l, from, to, oldP, newP, hits, stage: first });
     },
     [initial, vals, asked, others, card],
   );
@@ -493,7 +530,7 @@ export default function EditCard() {
                           {labelOf(c.key)} · {c.locale.toUpperCase()}
                           <div style={{ color: C.mute, fontSize: 11.5 }}>on {cid}</div>
                         </td>
-                        <td style={{ padding: 8, color: C.mute }}>same as this card before</td>
+                        <td style={{ padding: 8, color: C.mute, whiteSpace: "pre-wrap" }}>{(() => { const v = others.find((o) => o.id === cid)?.values[c.key]; return v && typeof v === "object" ? String(v[c.locale] ?? "") : ""; })()}</td>
                         <td style={{ padding: 8, whiteSpace: "pre-wrap" }}>{c.value}</td>
                       </tr>
                     )),
@@ -501,6 +538,25 @@ export default function EditCard() {
                 </tbody>
               </table>
               {review.errors.length > 0 && <div style={{ color: "#e06c5b", fontSize: 13 }}>{review.errors.join(" · ")}</div>}
+              <Consistency
+                keys={[...new Set([...changed.map((c) => c.key).filter((k) => isText(fieldByKey(k))), ...CTA_KEYS])]}
+                mine={(k) => ({ en: textOf(k, "en"), de: textOf(k, "de") })}
+                others={others}
+                lex={lex}
+                cross={cross}
+                onUseLex={(k, e) => {
+                  setText(k, "en", e.en);
+                  if (e.de) setText(k, "de", e.de);
+                }}
+                onSync={(k, ids) =>
+                  setCross((c) => {
+                    const out = { ...c };
+                    for (const cid of ids)
+                      out[cid] = [...(out[cid] ?? []).filter((x) => x.key !== k), ...(["en", "de"] as Loc[]).filter((l) => textOf(k, l)).map((l) => ({ key: k, locale: l, value: textOf(k, l) }))];
+                    return out;
+                  })
+                }
+              />
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button style={{ ...btn(), background: C.lava, borderColor: C.lava, color: "#fff", fontWeight: 600, height: 38, padding: "0 18px" }} disabled={!!busy} onClick={() => void apply()}>
                   Apply to staging
@@ -558,13 +614,6 @@ export default function EditCard() {
               initial={initial[k] ?? { en: "", de: "" }}
               where={whereUsed(k)}
               issues={{ en: issuesOf(k, "en"), de: issuesOf(k, "de") }}
-              lex={lex.filter((e) => e.field === k).sort((a, b) => Number(b.saved) - Number(a.saved) || b.uses - a.uses).slice(0, 3)}
-              examples={others
-                .flatMap((o) => {
-                  const v = o.values[k];
-                  return v && typeof v === "object" && v.en && norm(String(v.en)) !== norm(textOf(k, "en")) ? [{ card: o.name, en: String(v.en), de: String(v.de ?? "") }] : [];
-                })
-                .slice(0, 3)}
               onFocus={() => setFocus(k)}
               onChange={(l, v) => setText(k, l, v)}
               onBlur={(l) => checkScope(k, l)}
@@ -583,19 +632,16 @@ export default function EditCard() {
           ask={ask}
           onClose={() => setAsk(null)}
           onNext={(picked) => {
-            if (ask.stage === 0) {
-              for (const k of picked) setText(k, ask.lang, ask.to);
-              const nx = ask.campaign.length ? 1 : ask.global.length ? 2 : null;
-              setAsk(nx === null ? null : { ...ask, stage: nx as 1 | 2 });
-            } else {
-              if (picked.length)
-                setCross((c) => {
-                  const out = { ...c };
-                  for (const cid of picked) out[cid] = [...(out[cid] ?? []).filter((x) => !(x.key === ask.key && x.locale === ask.lang)), { key: ask.key, locale: ask.lang, value: ask.to }];
-                  return out;
-                });
-              setAsk(ask.stage === 1 && ask.global.length ? { ...ask, stage: 2 } : null);
-            }
+            const chosen = ask.hits.filter((h) => picked.includes(h.id));
+            for (const h of chosen.filter((x) => x.card === null)) setText(h.key, h.locale, h.after);
+            if (chosen.some((x) => x.card))
+              setCross((c) => {
+                const out = { ...c };
+                for (const h of chosen.filter((x) => x.card)) out[h.card!] = [...(out[h.card!] ?? []).filter((x) => !(x.key === h.key && x.locale === h.locale)), { key: h.key, locale: h.locale, value: h.after }];
+                return out;
+              });
+            const nx = ([1, 2] as const).find((g) => g > ask.stage && ask.hits.some((h) => h.group === g));
+            setAsk(nx ? { ...ask, stage: nx } : null);
           }}
         />
       )}
@@ -603,11 +649,11 @@ export default function EditCard() {
   );
 }
 
-// one field in the drawer: label, what it is, EN + DE, counters, rules, lexicon
+// one field in the drawer: label, what it is, EN + DE, counters, rules (lexicon + other cards: in the review)
 function FieldBox({
-  k, focused, value, initial, where, issues, lex, examples, onFocus, onChange, onBlur, onSave,
+  k, focused, value, initial, where, issues, onFocus, onChange, onBlur, onSave,
 }: {
-  k: string; focused: boolean; value: LV; initial: LV; where: string[]; issues: Record<Loc, string[]>; lex: LexEntry[]; examples: { card: string; en: string; de: string }[];
+  k: string; focused: boolean; value: LV; initial: LV; where: string[]; issues: Record<Loc, string[]>;
   onFocus: () => void; onChange: (l: Loc, v: string) => void; onBlur: (l: Loc) => void; onSave: () => void;
 }) {
   const f = fieldByKey(k);
@@ -661,25 +707,6 @@ function FieldBox({
           {l === "de" && value.en.trim() && !value.de.trim() && <div style={{ fontSize: 11.5, color: C.lava }}>German is missing.</div>}
         </div>
       ))}
-      {(lex.length > 0 || examples.length > 0) && (
-        <div style={{ display: "grid", gap: 5 }}>
-          <div style={{ fontSize: 10.5, color: C.mute, letterSpacing: ".06em", textTransform: "uppercase" }}>From the lexicon and other cards</div>
-          {lex.map((e) => (
-            <button key={e.id} onClick={() => { onChange("en", e.en); if (e.de) onChange("de", e.de); }} style={{ textAlign: "left", fontSize: 12, padding: "6px 8px", borderRadius: 8, border: `1px solid ${C.line2}`, background: "transparent", color: C.fg, cursor: "pointer" }}>
-              <span style={{ color: e.saved ? C.ok : C.mute, fontSize: 10.5, marginRight: 6 }}>{e.saved ? "approved" : `used ${e.uses}×`}</span>
-              {e.en}
-              {e.de && <span style={{ color: C.mute }}> / {e.de}</span>}
-            </button>
-          ))}
-          {examples.map((e, i) => (
-            <button key={i} onClick={() => { onChange("en", e.en); if (e.de) onChange("de", e.de); }} style={{ textAlign: "left", fontSize: 12, padding: "6px 8px", borderRadius: 8, border: `1px dashed ${C.line2}`, background: "transparent", color: C.fg, cursor: "pointer" }}>
-              <span style={{ color: C.mute, fontSize: 10.5, marginRight: 6 }}>{e.card}</span>
-              {e.en}
-              {e.de && <span style={{ color: C.mute }}> / {e.de}</span>}
-            </button>
-          ))}
-        </div>
-      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <details style={{ fontSize: 11.5, color: C.mute }}>
           <summary style={{ cursor: "pointer" }}>Team rules</summary>
@@ -698,50 +725,130 @@ function FieldBox({
 }
 
 function ScopeDialog({ ask, onClose, onNext }: { ask: Ask; onClose: () => void; onNext: (picked: string[]) => void }) {
-  const items =
-    ask.stage === 0
-      ? ask.journey.map((k) => ({ id: k, label: labelOf(k), sub: "" }))
-      : ask.stage === 1
-        ? ask.campaign.map((c) => ({ id: c.id, label: c.name, sub: c.id }))
-        : ask.global.map((c) => ({ id: c.id, label: c.name, sub: c.value }));
+  const items = ask.hits.filter((h) => h.group === ask.stage);
   const [picked, setPicked] = useState<string[]>(items.map((i) => i.id));
   useEffect(() => setPicked(items.map((i) => i.id)), [ask.stage]); // eslint-disable-line react-hooks/exhaustive-deps
+  const phrase = ask.oldP === ask.from ? "text" : `“${ask.oldP}”`;
+  const cards = new Set(items.map((i) => i.card)).size;
   const title =
     ask.stage === 0
-      ? `The same text is used ${items.length === 1 ? "once more" : `${items.length} more times`} in this journey. Change it there too?`
+      ? `${phrase[0].toUpperCase() + phrase.slice(1)} also appears in ${items.length === 1 ? "one more text" : `${items.length} more texts`} of this card. Replace it there too?`
       : ask.stage === 1
-        ? `${items.length} other card${items.length === 1 ? "" : "s"} of this campaign use the same text. Change ${items.length === 1 ? "it" : "them"} too?`
-        : "Cards in other campaigns use the same or a similar wording. Is this a global change?";
+        ? `${cards} other card${cards === 1 ? "" : "s"} of this campaign use ${phrase}. Replace it there too?`
+        : `${cards} card${cards === 1 ? "" : "s"} in other campaigns use ${phrase}. Is this a global change?`;
   return (
     <div role="dialog" aria-modal="true" aria-label="Where else should this change?" style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,.55)", display: "grid", placeItems: "center" }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: "calc(100vw - 32px)", borderRadius: 16, background: "#18181b", border: `1px solid ${C.line2}`, boxShadow: "0 30px 80px -20px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.06)", padding: 20, display: "grid", gap: 14 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 600, maxWidth: "calc(100vw - 32px)", borderRadius: 16, background: "#18181b", border: `1px solid ${C.line2}`, boxShadow: "0 30px 80px -20px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.06)", padding: 20, display: "grid", gap: 14 }}>
         <div style={{ fontSize: 11, color: C.mute, letterSpacing: ".08em", textTransform: "uppercase" }}>
-          {labelOf(ask.key)} · {ask.lang.toUpperCase()}
+          Search and replace · {ask.lang.toUpperCase()} · step {ask.stage + 1} of 3
         </div>
         <div style={{ fontSize: 16, fontWeight: 650 }}>{title}</div>
         <div style={{ fontSize: 13, color: C.mute }}>
-          <span style={{ textDecoration: "line-through" }}>{ask.from}</span> → <span style={{ color: C.fg }}>{ask.to}</span>
+          <span style={{ textDecoration: "line-through" }}>{ask.oldP}</span> → <span style={{ color: C.fg }}>{ask.newP || "(removed)"}</span>
         </div>
-        <div style={{ display: "grid", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+        <div style={{ display: "grid", gap: 6, maxHeight: 320, overflowY: "auto" }}>
           {items.map((i) => (
-            <label key={i.id} style={{ display: "flex", gap: 10, alignItems: "start", fontSize: 13, padding: "6px 8px", borderRadius: 8, border: `1px solid ${C.line}` }}>
+            <label key={i.id} style={{ display: "flex", gap: 10, alignItems: "start", fontSize: 13, padding: "7px 9px", borderRadius: 8, border: `1px solid ${C.line}` }}>
               <input type="checkbox" checked={picked.includes(i.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, i.id] : p.filter((x) => x !== i.id)))} style={{ marginTop: 3 }} />
-              <span>
-                {i.label}
-                {i.sub && <span style={{ display: "block", fontSize: 11.5, color: C.mute }}>{i.sub}</span>}
+              <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
+                <span style={{ fontSize: 11.5, color: C.mute }}>
+                  {i.card ? `${i.cardName} · ` : ""}
+                  {labelOf(i.key)}
+                </span>
+                <span style={{ whiteSpace: "pre-wrap" }}>{i.after}</span>
               </span>
             </label>
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button style={btn()} onClick={() => onNext([])}>
-            Only here
+            Skip
           </button>
           <button style={{ ...btn(), background: C.lava, borderColor: C.lava, color: "#fff", fontWeight: 600 }} onClick={() => onNext(picked)}>
-            Change {picked.length} {ask.stage === 0 ? "more" : picked.length === 1 ? "card" : "cards"}
+            Replace in {picked.length} text{picked.length === 1 ? "" : "s"}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// review summary: is this wording the same on every card? lexicon + other cards, grouped by wording
+function Consistency({
+  keys, mine, others, lex, cross, onUseLex, onSync,
+}: {
+  keys: string[]; mine: (k: string) => LV; others: OtherCard[]; lex: LexEntry[]; cross: Cross;
+  onUseLex: (k: string, e: LexEntry) => void; onSync: (k: string, ids: string[]) => void;
+}) {
+  const blocks = keys
+    .map((k) => {
+      const my = mine(k);
+      const val = (o: OtherCard) => {
+        const v = o.values[k];
+        return v && typeof v === "object" ? { en: String(v.en ?? ""), de: String(v.de ?? "") } : { en: "", de: "" };
+      };
+      const groups = new Map<string, { en: string; de: string; cards: OtherCard[] }>();
+      for (const o of others) {
+        const v = val(o);
+        if (!v.en.trim()) continue;
+        if (!CTA_KEYS.includes(k) && !similar(v.en, my.en)) continue; // texts: only similar expressions; CTAs: every wording
+        const g = groups.get(norm(v.en)) ?? { ...v, cards: [] };
+        g.cards.push(o);
+        groups.set(norm(v.en), g);
+      }
+      const differ = [...groups.values()].filter((g) => norm(g.en) !== norm(my.en) || norm(g.de) !== norm(my.de)).sort((a, b) => b.cards.length - a.cards.length);
+      const same = [...groups.values()].filter((g) => norm(g.en) === norm(my.en) && norm(g.de) === norm(my.de)).reduce((n, g) => n + g.cards.length, 0);
+      const lx = lex.filter((e) => e.field === k && norm(e.en) !== norm(my.en)).sort((a, b) => Number(b.saved) - Number(a.saved) || b.uses - a.uses).slice(0, 3);
+      return { k, my, differ, same, lx };
+    })
+    .filter((b) => b.my.en.trim() && (b.differ.length || b.lx.length));
+  if (!blocks.length) return null;
+  return (
+    <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 650 }}>Same wording on every card?</div>
+        <div style={{ fontSize: 12.5, color: C.mute }}>Similar texts and every button label on the other cards, plus approved phrasings from the lexicon. Sync them so the same content and function reads the same everywhere.</div>
+      </div>
+      {blocks.map((b) => (
+        <div key={b.k} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, display: "grid", gap: 8, background: "#141417" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              {labelOf(b.k)}
+              <span style={{ color: C.mute, fontWeight: 400 }}> · this card: “{b.my.en}”{b.my.de ? ` / “${b.my.de}”` : ""}</span>
+            </div>
+            {b.same > 0 && <span style={{ fontSize: 11.5, color: C.ok }}>same on {b.same} card{b.same === 1 ? "" : "s"}</span>}
+          </div>
+          {b.differ.map((g) => {
+            const ids = g.cards.map((c) => c.id);
+            const done = ids.every((id) => (cross[id] ?? []).some((x) => x.key === b.k));
+            return (
+              <div key={g.en} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", fontSize: 12.5, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
+                <span style={{ minWidth: 0 }}>
+                  “{g.en}”{g.de ? <span style={{ color: C.mute }}> / “{g.de}”</span> : null}
+                  <span style={{ display: "block", fontSize: 11, color: C.mute }}>
+                    {g.cards.length} card{g.cards.length === 1 ? "" : "s"}: {g.cards.slice(0, 6).map((c) => c.name).join(", ")}
+                    {g.cards.length > 6 ? ` +${g.cards.length - 6}` : ""}
+                  </span>
+                </span>
+                <button style={{ ...btn(done), flexShrink: 0 }} disabled={done} onClick={() => onSync(b.k, ids)}>
+                  {done ? "Will be synced" : `Use this card's wording on ${ids.length}`}
+                </button>
+              </div>
+            );
+          })}
+          {b.lx.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
+              <span style={{ fontSize: 11, color: C.mute, alignSelf: "center" }}>Lexicon:</span>
+              {b.lx.map((e) => (
+                <button key={e.id} onClick={() => onUseLex(b.k, e)} style={{ ...btn(), height: 28, fontSize: 12 }} title="Use this wording on this card">
+                  <span style={{ color: e.saved ? C.ok : C.mute, fontSize: 10.5 }}>{e.saved ? "approved" : `used ${e.uses}×`}</span> {e.en}
+                  {e.de ? <span style={{ color: C.mute }}> / {e.de}</span> : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
