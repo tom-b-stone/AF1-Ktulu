@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import KtuluLogo from "./KtuluLogo";
 import MorphIcon, { MORPH_PRESETS } from "./MorphIcon";
+import { canUseTool, type Role } from "@/lib/toolAccess";
 
 // The app header (Neuron-style sticky bar): AF1-KTULU wordmark on a strip
 // of the living ASCII field, a Tools menu in the middle that switches
@@ -95,7 +96,7 @@ export default function ToolHeader() {
         {/* Tools: a row of rotating 3D icons. Hover extends the pill
             horizontally and reveals the name; the current tool stays open. */}
         <nav aria-label="Tools" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
-          {TOOLS.map((t) => {
+          {TOOLS.filter((t) => canUseTool((session.user as { role?: Role } | undefined)?.role, t.key)).map((t) => {
             const active = tool?.key === t.key;
             const preset = MORPH_PRESETS[t.key] ?? {};
             const inner = (

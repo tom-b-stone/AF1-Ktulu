@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { isAdminEmail, isAllowedEmail } from "./auth";
+import { isAllowedEmail, roleOf } from "./auth";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -22,7 +22,7 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
     async jwt({ token, account }) {
-      token.role = isAdminEmail(token.email as string | undefined) ? "admin" : "editor";
+      token.role = roleOf(token.email as string | undefined);
       // Google Drive read access, only for users who connected it (GP Mini-Zine:
       // photos straight from SlashLens/Drive). Stays server-side in the JWT.
       if (account?.provider === "google" && account.scope?.includes("drive.readonly")) {

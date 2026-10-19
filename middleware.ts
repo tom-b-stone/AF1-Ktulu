@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { blockedPath, type Role } from "./lib/toolAccess";
 
 // /api/mcp is the Claude connector endpoint: called by Anthropic's servers,
 // never by a browser with a session cookie. It authenticates itself with the
@@ -34,6 +35,15 @@ export async function middleware(req: NextRequest) {
     }
     const url = req.nextUrl.clone();
     url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  // Tools in development are closed to the test group (pages and their APIs).
+  if (blockedPath(token.role as Role | undefined, pathname)) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "This tool is still in development." }, { status: 403 });
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "?locked=1";
     return NextResponse.redirect(url);
   }
 

@@ -1,56 +1,53 @@
 "use client";
 
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { RELEASE, STATUS_LABEL, canUseTool, type ReleaseStatus, type Role } from "@/lib/toolAccess";
 import HomeBackground, { useBackgroundChoice } from "./components/HomeBackground";
 import HomeFooter from "./components/HomeFooter";
 import HomeTile from "./components/HomeTile";
 import SuggestionTile from "./components/SuggestionTile";
 import Wordmark from "./components/Wordmark";
 
-type Status = "working" | "staging" | "planned";
-
 // Tag colours: AF1 lava red for what's live, the vapor palette (purple /
 // pink from the background image) for the rest. Same tokens in globals.css.
-const STATUS: Record<Status, { label: string; bg: string; fg: string; border: string }> = {
-  working: { label: "working", bg: "rgba(255,45,0,0.14)", fg: "var(--accent)", border: "rgba(255,45,0,0.4)" },
-  staging: { label: "staging", bg: "rgba(200,117,181,0.14)", fg: "var(--vapor-pink)", border: "rgba(200,117,181,0.4)" },
-  planned: { label: "planned", bg: "rgba(112,86,167,0.16)", fg: "var(--vapor-lilac)", border: "rgba(112,86,167,0.45)" },
+// The status itself comes from lib/toolAccess (one place for every tool).
+const STATUS: Record<ReleaseStatus, { label: string; bg: string; fg: string; border: string }> = {
+  live: { label: STATUS_LABEL.live, bg: "rgba(255,45,0,0.14)", fg: "var(--accent)", border: "rgba(255,45,0,0.4)" },
+  test: { label: STATUS_LABEL.test, bg: "rgba(111,207,124,0.12)", fg: "#8fdc98", border: "rgba(111,207,124,0.4)" },
+  dev: { label: STATUS_LABEL.dev, bg: "rgba(200,117,181,0.14)", fg: "var(--vapor-pink)", border: "rgba(200,117,181,0.4)" },
+  plan: { label: STATUS_LABEL.plan, bg: "rgba(112,86,167,0.16)", fg: "var(--vapor-lilac)", border: "rgba(112,86,167,0.45)" },
 };
 
-const TILES: { title: string; href: string; key: string; external?: boolean; status: Status; text: string }[] = [
+const TILES: { title: string; href: string; key: string; external?: boolean; text: string }[] = [
   {
     title: "SEO Studio",
     href: "/seo",
     key: "/seo",
-    status: "staging",
     text: "Meta titles and descriptions for news and pages, EN and DE. Your Claude writes, the tool publishes.",
   },
   {
     title: "Asset Uploader",
     href: "/assets",
     key: "/assets",
-    status: "working",
     text: "Drop photos, compress, name, alt text, upload to the right CMS folder.",
   },
   {
     title: "GP Mini-Zine",
     href: "/photobook",
     key: "/photobook",
-    status: "staging",
     text: "GP Mini-Zine: print, fold, colour in, share via QR. Prototype.",
   },
   {
     title: "Team Card Configurator",
     href: "/teamcards",
     key: "/teamcards",
-    status: "staging",
     text: "All Team Cards, guided editing with a live journey preview, and a helper for bulk changes in EN and DE.",
   },
   {
     title: "CRM Images",
     href: "/images",
     key: "/images",
-    status: "planned",
     text: "Cropped, rounded variants for the CRM email templates.",
   },
   {
@@ -58,13 +55,14 @@ const TILES: { title: string; href: string; key: string; external?: boolean; sta
     href: "https://af1-utm-studio.vercel.app/",
     key: "/utm",
     external: true,
-    status: "working",
     text: "Campaign links with UTM tags. Opens in its own tab for now.",
   },
 ];
 
 export default function Home() {
   const [bg, setBg] = useBackgroundChoice();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: Role } | undefined)?.role;
   return (
     <div style={{ maxWidth: 880, margin: "0 auto", paddingTop: 8, position: "relative", zIndex: 1 }}>
       <HomeBackground choice={bg} />
@@ -109,7 +107,14 @@ export default function Home() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 26, rowGap: 34 }}>
         {TILES.map((t, i) => (
           <div key={t.key} className={`reveal reveal-d${(i % 6) + 1}`} style={{ display: "flex" }}>
-            <HomeTile title={t.title} href={t.href} tileKey={t.key} external={t.external} status={STATUS[t.status]} text={t.text} />
+            <HomeTile
+              title={t.title}
+              href={canUseTool(role, t.key) ? t.href : undefined}
+              tileKey={t.key}
+              external={t.external}
+              status={STATUS[RELEASE[t.key]?.status ?? "dev"]}
+              text={canUseTool(role, t.key) ? t.text : `${t.text} Opens for the test group once it is ready to test.`}
+            />
           </div>
         ))}
       </div>

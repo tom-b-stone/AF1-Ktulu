@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveConnectorToken } from "@/lib/connectorTokens";
 import { TOOLS, findTool } from "@/lib/mcpTools";
+import { roleOf } from "@/lib/auth";
+import { canUseMcpTool } from "@/lib/toolAccess";
 
 // The "AF1 Tools" connector: a minimal MCP server over Streamable HTTP
 // (JSON-RPC 2.0 over POST), stateless, authenticated by the per-user token
@@ -45,7 +47,7 @@ async function handle(req: RpcRequest, actor: string): Promise<unknown | undefin
       return rpcResult(req.id, {});
     case "tools/list":
       return rpcResult(req.id, {
-        tools: TOOLS.map(({ name, description, inputSchema, annotations }) => ({
+        tools: TOOLS.filter((t) => canUseMcpTool(roleOf(actor), t.name)).map(({ name, description, inputSchema, annotations }) => ({
           name,
           description,
           inputSchema,
@@ -56,6 +58,7 @@ async function handle(req: RpcRequest, actor: string): Promise<unknown | undefin
       const name = typeof params.name === "string" ? params.name : "";
       const tool = findTool(name);
       if (!tool) return rpcError(req.id, -32602, `Unknown tool: ${name}`);
+      if (!canUseMcpTool(roleOf(actor), name)) return rpcError(req.id, -32602, `${name} is part of a tool that is still in development.`);
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       try {
         return rpcResult(req.id, await tool.run(args, actor));
