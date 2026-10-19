@@ -50,8 +50,8 @@ export async function ensureZineAssets(origin: string, force = false): Promise<Z
     for (const f of ZINE_FANS) out.push({ id: await up(`audif1_gp-mini-zine_fan-${f.slug}.jpg`, `${f.alt} (AI-generated example)`), gp: f.gp });
     return out;
   };
-  // share box background: wide flat lay of zines from many Grand Prix, text-safe centre
-  const shareVideo = () => up("audif1_gp-mini-zine_share-bg.mp4", "Video: GP Mini-Zines from different Grand Prix on a desk (AI-generated)");
+  // share box background: many fans holding up their zines, soft focus and darkened under the text
+  const shareVideo = () => up("audif1_gp-mini-zine_share-bg.mp4", "Video: fans hold up their GP Mini-Zines from different Grand Prix (AI-generated)");
   const v4raw = force ? null : await kvGet(KEY_V4).catch(() => null);
   if (v4raw) {
     const assets: ZineAssets = { ...(JSON.parse(v4raw) as ZineAssets), share: await shareVideo() };
