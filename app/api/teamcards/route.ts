@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { applyChanges, diff, listCards, stagingLinks, type Change } from "@/lib/teamCards";
+import { applyChanges, cardCheck, cardMeta, diff, listCards, stagingLinks, type Change } from "@/lib/teamCards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,7 +11,8 @@ export async function GET() {
   if (!session?.user?.email) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const cards = await listCards();
-    return NextResponse.json({ cards: cards.map((c) => ({ ...c, links: stagingLinks(c) })) });
+    const meta = await cardMeta(cards).catch(() => ({}) as Awaited<ReturnType<typeof cardMeta>>);
+    return NextResponse.json({ cards: cards.map((c) => ({ ...c, links: stagingLinks(c), meta: meta[c.staging.badgeId] ?? { core: false }, check: cardCheck(c) })) });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "failed" }, { status: 502 });
   }

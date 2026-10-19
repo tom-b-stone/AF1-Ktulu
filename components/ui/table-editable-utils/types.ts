@@ -24,6 +24,8 @@ export type TableColumn<T> = {
   editable?: boolean;
   /** Value used for sorting. Falls back to `row[key]`. */
   sortValue?: (row: T) => string | number;
+  /** A small control (e.g. a filter select) shown next to the header label. */
+  headerExtra?: ReactNode;
 };
 
 export type InsertPosition = "before" | "after";

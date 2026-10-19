@@ -314,6 +314,7 @@ export function TableHeader<T>({
                     {column.header}
                   </span>
                 )}
+                {column.headerExtra ? <div className="shrink-0 pr-2">{column.headerExtra}</div> : null}
               </motion.div>
               {resizable ? (
                 <button

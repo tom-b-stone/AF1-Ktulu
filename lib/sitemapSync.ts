@@ -567,16 +567,22 @@ export async function mediaFile(id: string): Promise<{ body: ArrayBuffer; type: 
   const sizes = Object.values(doc.sizes ?? {}) as Json[];
   // only sizes with the original's aspect ratio (some sizes are cropped)
   const ratio = doc.width && doc.height ? doc.width / doc.height : 0;
-  const pick = sizes.filter((s) => s?.url && s.width && s.height && s.width <= 2000 && (!ratio || Math.abs(s.width / s.height - ratio) / ratio < 0.02)).sort((a, b) => b.width - a.width)[0];
+  // the smallest size of at least 1000 px with the original's ratio, else the biggest below 2600 px
+  const same = sizes.filter((s) => s?.url && s.width && s.height && s.width <= 2600 && (!ratio || Math.abs(s.width / s.height - ratio) / ratio < 0.02));
+  const pick = [...same].sort((a, b) => a.width - b.width).find((s) => s.width >= 1000) ?? [...same].sort((a, b) => b.width - a.width)[0];
   // videos/animations: use a still (thumbnail or any image size) so Figma gets a picture
   const isImage = !doc.mimeType || /^image\//.test(doc.mimeType);
-  const still = sizes.filter((s) => s?.url && (!s.mimeType || /^image\//.test(s.mimeType))).sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
-  const urls = [pick?.url, isImage ? doc.url : null, doc.thumbnailURL, still?.url, doc.url].filter(Boolean) as string[];
+  const still = sizes.filter((s) => s?.url && (!s.mimeType || /^image\//.test(s.mimeType)) && (s.width ?? 0) <= 2600).sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
+  // the original last: full-size uploads (Asset Uploader) can be bigger than a function response allows
+  const urls = [pick?.url, still?.url, doc.thumbnailURL, isImage ? doc.url : null, doc.url].filter(Boolean) as string[];
   for (const url of [...new Set(urls)]) {
     const path = url.replace(/^https?:\/\/[^/]+/, "").replace(/^\/cms\/api/, "");
     const res = await stagingRequest(path).catch(() => null);
     const type = res?.headers.get("content-type") ?? "image/webp";
-    if (res?.ok && /^image\//.test(type)) return { body: await res.arrayBuffer(), type };
+    if (!res?.ok || !/^image\//.test(type)) continue;
+    const body = await res.arrayBuffer();
+    if (body.byteLength > 4_000_000) continue; // over the 4.5 MB response limit
+    return { body, type };
   }
   return null;
 }

@@ -309,3 +309,54 @@ export async function importCampaignCards(
   await saveCards(cards);
   return { added, total: cards.length };
 }
+
+// ---- overview: what a card is and what it still needs ---------------------
+export type CardMeta = { type?: string; core: boolean; campaign?: string; race?: string; partner?: string; season?: string };
+export type CardCheck = { missing: string[]; quick: "Ready" | "Missing" | "Disabled" };
+
+const tagTitle = (t: Json): string | undefined => (t && typeof t === "object" ? String(t.title ?? t.name ?? t.label ?? "") || undefined : undefined);
+
+// One staging read for all cards: badge type and loyalty tags (campaign, race, partner, season).
+export async function cardMeta(cards: CardRecord[]): Promise<Record<string, CardMeta>> {
+  const ids = [...new Set(cards.map((c) => c.staging.badgeId))];
+  if (!ids.length) return {};
+  const w = encodeURIComponent(JSON.stringify({ id: { in: ids } }));
+  const r = await stg(`/badges?where=${w}&limit=200&depth=1&locale=en&draft=true`).catch(() => ({ docs: [] }));
+  const out: Record<string, CardMeta> = {};
+  for (const b of (r.docs ?? []) as Json[]) {
+    const type = tagTitle(b.badgeType);
+    out[b.id] = { type, core: /core/i.test(type ?? ""), campaign: tagTitle(b.campaignTitle), race: tagTitle(b.raceTag), partner: tagTitle(b.partnerTag), season: tagTitle(b.season) };
+  }
+  return out;
+}
+
+const ENGAGED = new Set(["q-and-a", "survey", "hot-or-not"]);
+// Texts every card needs; engagement and reward texts only where the card has them.
+export function cardCheck(c: CardRecord): CardCheck {
+  if (c.values.disabled === true) return { missing: [], quick: "Disabled" };
+  const missing: string[] = [];
+  const need = (key: string) => {
+    const f = fieldByKey(key);
+    if (!f) return;
+    const v = c.values[key];
+    if (!f.localized) {
+      if (v === undefined || v === "") missing.push(f.label);
+      return;
+    }
+    const lv = (v ?? {}) as LocValue;
+    const en = String(lv.en ?? "").trim(), de = String(lv.de ?? "").trim();
+    if (!en && !de) missing.push(f.label);
+    else if (!en) missing.push(`EN ${f.label}`);
+    else if (!de) missing.push(`DE ${f.label}`);
+  };
+  if (!c.imageUrl) missing.push("Card image");
+  ["publicTitle", "description", "badgePopupTitle", "revealTitle", "revealDescription", "revealButton", "ctaLabel"].forEach(need);
+  if (c.rewardType && c.rewardType !== "noReward") ["rewardDescription", "rewardTeaser"].forEach(need);
+  if (ENGAGED.has(c.mechanic ?? "")) {
+    if (!c.staging.engagementId) missing.push("Engagement");
+    else ["question", "submitLabel", "postTitle", "postMessage"].forEach(need);
+  }
+  if (!c.staging.pageId || !c.staging.blockId) missing.push("Placement on a page");
+  else need("modHeadline");
+  return { missing, quick: missing.length ? "Missing" : "Ready" };
+}
