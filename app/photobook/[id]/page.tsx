@@ -74,6 +74,8 @@ export default function PhotobookEditor() {
   const [slBusy, setSlBusy] = useState<"" | "pick" | "save" | "import">("");
   const [driveMissing, setDriveMissing] = useState(false);
   const [slOff, setSlOff] = useState<Set<string>>(new Set());
+  const [sel, setSel] = useState<Set<string>>(new Set()); // step 1: photos picked for deleting
+  const [confirmDel, setConfirmDel] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   useEffect(() => {
@@ -248,9 +250,29 @@ export default function PhotobookEditor() {
     void save({ ...book, order });
   }
   async function removePhoto(id: string) {
-    if (!book) return;
-    await bookStore.deletePhoto(book.id, id);
-    await save({ ...book, photos: book.photos.filter((p) => p.id !== id), order: book.order.filter((x) => x !== id), coverId: book.coverId === id ? undefined : book.coverId });
+    await removePhotos([id]);
+  }
+  async function removePhotos(ids: string[]) {
+    if (!book || !ids.length) return;
+    const gone = new Set(ids);
+    for (const id of ids) await bookStore.deletePhoto(book.id, id);
+    await save({
+      ...book,
+      photos: book.photos.filter((p) => !gone.has(p.id)),
+      order: book.order.filter((x) => !gone.has(x)),
+      coverId: book.coverId && gone.has(book.coverId) ? undefined : book.coverId,
+    });
+    setSel(new Set());
+    setConfirmDel(false);
+    setNotice({ tone: "ok", text: `${ids.length} photo${ids.length === 1 ? "" : "s"} removed from this zine.` });
+  }
+  function toggleSel(id: string) {
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   }
   async function previewPage(n: number) {
     if (!book) return;
@@ -526,11 +548,50 @@ export default function PhotobookEditor() {
               </div>
             </div>
             {book.photos.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(84px, 1fr))", gap: 6 }}>
-                {book.photos.map((p) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={p.id} src={thumbs[p.id]} alt="" title={p.name} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 6 }} />
-                ))}
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 12, color: "var(--muted)" }}>
+                  <span style={{ marginRight: "auto" }}>
+                    {book.photos.length} photos{sel.size ? ` · ${sel.size} selected` : " · click photos to select them"}
+                  </span>
+                  <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setSel(sel.size === book.photos.length ? new Set() : new Set(book.photos.map((p) => p.id)))}>
+                    {sel.size === book.photos.length ? "Select none" : "Select all"}
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={!sel.size}
+                    style={{ padding: "4px 10px", fontSize: 12, borderColor: sel.size ? "#c0392b" : undefined, color: sel.size ? "#ff8a7a" : undefined }}
+                    onClick={() => (confirmDel ? void removePhotos([...sel]) : setConfirmDel(true))}
+                    onBlur={() => setConfirmDel(false)}
+                  >
+                    {confirmDel ? `Yes, delete ${sel.size}` : `Delete selected${sel.size ? ` (${sel.size})` : ""}`}
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(84px, 1fr))", gap: 6 }}>
+                  {book.photos.map((p) => {
+                    const on = sel.has(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setConfirmDel(false);
+                          toggleSel(p.id);
+                        }}
+                        aria-pressed={on}
+                        title={p.name}
+                        style={{ padding: 0, position: "relative", border: `2px solid ${on ? "#ff5a3c" : "transparent"}`, borderRadius: 8, overflow: "hidden", background: "var(--surface)", cursor: "pointer", aspectRatio: "1" }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={thumbs[p.id]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: on ? 0.55 : 1 }} />
+                        <span
+                          aria-hidden
+                          style={{ position: "absolute", top: 4, left: 4, width: 18, height: 18, borderRadius: 999, border: "1.5px solid #fff", background: on ? "#ff5a3c" : "rgba(0,0,0,0.35)", color: "#fff", fontSize: 11, lineHeight: "15px", textAlign: "center" }}
+                        >
+                          {on ? "\u2713" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
