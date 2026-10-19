@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/authOptions";
 import { listDraftPages, patchDraftSections, upsertDraftPage } from "@/lib/payloadClient";
 import {
   buildCollectionSection,
+  buildZineBottom,
   buildZineMeta,
   buildZineSections,
   withCollection,
@@ -44,7 +45,8 @@ export async function POST(req: NextRequest) {
       steps.push(`how-to media missing (${e instanceof Error ? e.message.slice(0, 80) : "error"})`);
     }
     const m = b.meta;
-    const sections = buildZineSections(m, assets, { coverMedia: b.coverId, pdfs: b.pdfs, pageUrl: `${ZINE_SITE}/${zinePageSlug(m)}` });
+    const zids = { coverMedia: b.coverId, pdfs: b.pdfs, pageUrl: `${ZINE_SITE}/${zinePageSlug(m)}` };
+    const sections = [...buildZineSections(m, assets, zids), ...buildZineBottom(m, assets, zids)];
     const page = await upsertDraftPage(zinePageSlug(m), {
       title: zinePageTitle(m),
       authRequirement: "PUBLIC",

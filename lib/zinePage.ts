@@ -14,7 +14,19 @@ export type ZineMeta = {
   instagram: string; // handle without @
 };
 
-export type ZineAssets = { teaser: string; steps: string[]; preview?: string }; // media ids
+// media ids; fans = inspiration photos (fans with their zines), share = video behind the share box
+export type ZineAssets = { teaser: string; steps: string[]; preview?: string; fans?: { id: string; gp: string }[]; share?: string };
+
+// Inspiration gallery: fans with their zines from different Grand Prix. AI-generated examples
+// for the demo, to be replaced by real fan posts (with permission) once the series runs.
+export const ZINE_FANS: { slug: string; gp: string; alt: string }[] = [
+  { slug: "monaco", gp: "Monaco", alt: "A fan in a Monaco café holds up her coloured-in GP Mini-Zine" },
+  { slug: "silverstone", gp: "Silverstone", alt: "A Silverstone GP Mini-Zine on a desk with coloured pencils" },
+  { slug: "monza", gp: "Monza", alt: "A fan holds his customised Monza GP Mini-Zine in the grandstand" },
+  { slug: "suzuka", gp: "Suzuka", alt: "A fan shows her collection of GP Mini-Zines, Suzuka in front" },
+  { slug: "las-vegas", gp: "Las Vegas", alt: "A Las Vegas GP Mini-Zine held up against the lights of the Strip" },
+  { slug: "singapore", gp: "Singapore", alt: "A boy shows the Singapore GP Mini-Zine he coloured in" },
+];
 
 // pdfs: one media id per edition (photo zine, DIY cover, colouring book)
 export type ZineIds = { coverMedia: string; pageUrl: string; pdfs: { photo?: string; diy?: string; colouring?: string } };
@@ -99,9 +111,13 @@ export function buildCollectionSection(entries: ZineEntry[], currentPageId?: str
   };
 }
 
-// Puts the collection slider at the bottom of a page's sections (replaces an older one).
+// Puts the collection slider after the how-to (replaces an older one); the
+// inspiration gallery and the share box stay at the very bottom.
+const BOTTOM = new Set(["inspiration", "share"]);
+const isBottom = (s: Record<string, unknown>) => BOTTOM.has(String(s.anchorId ?? "")) || String(s.blockName ?? "").startsWith("Inspiration");
 export function withCollection(sections: Record<string, unknown>[], collection: ReturnType<typeof buildCollectionSection>) {
-  return [...sections.filter((s) => s.anchorId !== COLLECTION_ANCHOR), collection];
+  const rest = sections.filter((s) => s.anchorId !== COLLECTION_ANCHOR);
+  return [...rest.filter((s) => !isBottom(s)), collection, ...rest.filter(isBottom)];
 }
 
 const signIn = (label: string, isSignup: boolean, variant: "primary" | "quaternary") => ({
@@ -124,7 +140,6 @@ const download = (label: string, asset: string, variant: "primary" | "secondary"
 // the three PDFs) with the preview video → how-to slider → share → the
 // collection slider (added by the publish route once the page id exists).
 export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineIds) {
-  const tags = m.hashtags.join(" ");
   const video = a?.preview ?? a?.teaser;
   const downloads = [
     ids.pdfs.photo && download("Photo Edition (PDF)", ids.pdfs.photo, "primary"),
@@ -198,30 +213,64 @@ export function buildZineSections(m: ZineMeta, a: ZineAssets | null, ids: ZineId
       anchorId: "how-to",
       authRequirement: "PUBLIC",
     },
-    {
-      blockType: "call-to-action",
-      category: "Share",
-      headline: "Show us your edition.",
-      copy: `Coloured in, customised or kept as it is: photograph your finished zine, post it with ${tags} and tag @${m.instagram}. See you at the next Grand Prix.`,
-      ctas: [],
-      container: {
-        contentPosition: "center",
-        size: "fit",
-        background: { type: "color", color: "chalk", imageSettings: { shouldHaveOverlay: false, bgColor: "graphite" } },
-      },
-      children: [
-        {
-          blockType: "share-to-button-list",
-          variant: "tertiary",
-          url: ids.pageUrl,
-          shareMessage: `My ${m.city} edition of the GP Mini-Zine from the Audi Revolut F1® Team: official photos from the ${m.gpName}, printed, folded and made my own. ${tags}`,
-          shareButtons: ["whatsapp", "facebook", "twitter", "copy"].map((social) => ({ shareButton: { social } })),
-        },
-      ],
-      anchorId: "share",
-      authRequirement: "PUBLIC",
-    },
+    // inspiration + share go to the bottom, after the collection slider (see withCollection)
   ];
+}
+
+// Bottom of the page: fans' zines from different Grand Prix as inspiration,
+// then the boxed share CTA with the fan video behind the share buttons.
+export function buildZineBottom(m: ZineMeta, a: ZineAssets | null, ids: ZineIds) {
+  const tags = m.hashtags.join(" ");
+  const out: Record<string, unknown>[] = [];
+  if (a?.fans?.length) {
+    out.push(
+      {
+        blockType: "call-to-action",
+        category: "Inspiration",
+        headline: "Made by fans.",
+        copy: "Coloured in, stickered, signed or collected: GP Mini-Zines from race weekends around the world.",
+        ctas: [],
+        container: { contentPosition: "center", size: "fit", background: { type: "color", color: "chalk", imageSettings: { shouldHaveOverlay: false, bgColor: "graphite" } } },
+        children: [],
+        anchorId: "inspiration",
+        authRequirement: "PUBLIC",
+        blockName: "Inspiration · headline",
+      },
+      {
+        blockType: "gallery",
+        images: a.fans.map((f) => ({ image: { ctas: [], background: { type: "image", imageSettings: { media: f.id, shouldHaveOverlay: false, bgColor: "graphite", hasFullScreenMode: true, isSameAsFullScreen: true } } } })),
+        authRequirement: "PUBLIC",
+        blockName: "Inspiration · fan zines",
+      }
+    );
+  }
+  out.push({
+    blockType: "call-to-action",
+    category: "Share",
+    headline: "Show us your edition.",
+    copy: `Coloured in, customised or kept as it is: photograph your finished zine, post it with ${tags} and tag @${m.instagram}. See you at the next Grand Prix.`,
+    ctas: [],
+    container: {
+      contentPosition: "center",
+      size: "boxed",
+      background: a?.share
+        ? { type: "image", imageSettings: { media: a.share, shouldHaveOverlay: true, bgColor: "graphite" } }
+        : { type: "color", color: "graphite", imageSettings: { shouldHaveOverlay: false, bgColor: "graphite" } },
+    },
+    children: [
+      {
+        blockType: "share-to-button-list",
+        variant: "tertiary",
+        url: ids.pageUrl,
+        shareMessage: `My ${m.city} edition of the GP Mini-Zine from the Audi Revolut F1® Team: official photos from the ${m.gpName}, printed, folded and made my own. ${tags}`,
+        shareButtons: ["whatsapp", "facebook", "twitter", "copy"].map((social) => ({ shareButton: { social } })),
+      },
+    ],
+    anchorId: "share",
+    authRequirement: "PUBLIC",
+    blockName: "Share (boxed)",
+  });
+  return out;
 }
 
 export function buildZineMeta(m: ZineMeta, coverMedia: string) {
