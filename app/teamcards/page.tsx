@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Replace from "./Replace";
+import { cardTemplate } from "@/lib/cardTemplate";
 import TrackerImport from "./TrackerImport";
 import { SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
@@ -141,7 +142,7 @@ export default function Page() {
 
   const columns: TableColumn<Row>[] = [
     // eslint-disable-next-line @next/next/no-img-element
-    { key: "img", header: "", width: "56px", cell: (c) => (c.imageUrl ? <img src={c.imageUrl} alt="" style={{ width: 36, borderRadius: 4, display: "block" }} /> : <div title="No card image" style={{ width: 36, height: 45, borderRadius: 4, border: "1px dashed #c0392b" }} />) },
+    { key: "img", header: "", width: "56px", cell: (c) => <img src={c.imageUrl || cardTemplate(c.name)} alt={c.imageUrl ? "" : "Card image not defined yet"} title={c.imageUrl ? undefined : "Card image not defined yet (template)"} style={{ width: 36, aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 4, display: "block" }} /> },
     {
       key: "name",
       header: "Card",

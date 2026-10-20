@@ -6,6 +6,7 @@
 // editable in place (WYSIWYG); edits go to the record, not the site.
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import type { Loc } from "@/lib/teamCardFields";
+import { NOT_DEFINED, cardTemplate } from "@/lib/cardTemplate";
 
 export const AF = { chalk: "#F5F2F2", grey01: "#E0DDDD", graphite: "#2B2929", graphite2: "#423F3F", lava: "#E33E1A", mute: "#767373", light: "#B3AFAF", popup: "#E6E3E3" };
 const BACKSIDE = "https://www.audif1.com/_next/image?url=%2Fbadge-backside.png&w=1200&q=75";
@@ -79,7 +80,7 @@ const Pill = ({ children, bg, fg, border }: { children: ReactNode; bg: string; f
 
 const CardImg = ({ src, w, tilt = 0, back = false }: { src?: string; w: number; tilt?: number; back?: boolean }) => (
   // eslint-disable-next-line @next/next/no-img-element
-  <img src={back || !src ? BACKSIDE : src} alt="" style={{ width: w, display: "block", borderRadius: w / 18, transform: `rotate(${tilt}deg)`, boxShadow: "0 30px 40px -20px rgba(0,0,0,.45)" }} />
+  <img src={back ? BACKSIDE : src || cardTemplate()} alt="" style={{ width: w, display: "block", borderRadius: w / 18, transform: `rotate(${tilt}deg)`, boxShadow: "0 30px 40px -20px rgba(0,0,0,.45)" }} />
 );
 
 // ---- 1 module on the page ------------------------------------------------
@@ -302,10 +303,10 @@ export function CardFront({ c, title, text, button, buttonText, label, dim = fal
 
 export function CardBack({ c, text, button, buttonText, label, typeLabel, race }: { c: EditCtx; text: string; button?: string; buttonText?: string; label: string; typeLabel?: string; race?: string }) {
   const de = c.lang === "de";
-  const cell = (h: string, v: string) => (
+  const cell = (h: string, v: string, todo = false) => (
     <div style={{ textAlign: "center" }}>
       <div style={{ fontSize: 12, letterSpacing: "0.04em", color: AF.light }}>{h}</div>
-      <div style={{ fontSize: 14, marginTop: 4, minHeight: 18 }}>{v}</div>
+      <div style={{ fontSize: 14, marginTop: 4, minHeight: 18, ...(!v && todo ? { opacity: 0.55, fontStyle: "italic" } : {}) }}>{v || (todo ? NOT_DEFINED[de ? "de" : "en"] : "")}</div>
     </div>
   );
   return (
@@ -313,8 +314,8 @@ export function CardBack({ c, text, button, buttonText, label, typeLabel, race }
       <div style={{ marginTop: 44, background: "#3D3A3A", borderRadius: 14, padding: "18px 14px 26px" }}>
         <div style={{ textAlign: "center", fontSize: 19 }}>{de ? "Team Card Details" : "Team Card Details"}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
-          {cell(de ? "TYP" : "CARD TYPE", typeLabel ?? "")}
-          {cell(de ? "RENNEN" : "RACE", race ?? "")}
+          {cell(de ? "TYP" : "CARD TYPE", typeLabel ?? "", true)}
+          {cell(de ? "RENNEN" : "RACE", race ?? "", true)}
           {cell(de ? "EINGELÖST" : "REDEEMED", "")}
           {cell(de ? "GESAMMELT AM" : "DATE EARNED", "")}
         </div>
@@ -340,7 +341,7 @@ export function ShelfView({ c, earned }: { c: EditCtx; earned: boolean }) {
     </div>
   );
   // eslint-disable-next-line @next/next/no-img-element
-  const mine = <img src={earned ? c.imageUrl : BACKSIDE} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: earned ? undefined : "grayscale(1) blur(2px) opacity(.7)" }} />;
+  const mine = <img src={earned ? c.imageUrl || cardTemplate(undefined, c.lang === "de" ? "de" : "en") : BACKSIDE} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", filter: earned ? undefined : "grayscale(1) blur(2px) opacity(.7)" }} />;
   return (
     <div style={{ background: AF.chalk, padding: "32px 24px", fontFamily: "var(--font-heading)", color: AF.graphite, borderRadius: 14, maxWidth: 420, margin: "0 auto" }}>
       <div style={{ color: "#FF3B13", fontSize: 14 }}>{de ? "Sammle die Team Cards" : "Collect the Team Cards"}</div>

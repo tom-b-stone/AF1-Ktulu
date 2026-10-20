@@ -9,6 +9,7 @@
 // preview selects its field on the left.
 import { useEffect, useMemo, useRef } from "react";
 import type { Loc } from "@/lib/teamCardFields";
+import { NOT_DEFINED, cardTemplate } from "@/lib/cardTemplate";
 
 type Vals = Record<string, { en?: string; de?: string } | string | boolean | undefined>;
 export type PreviewCard = {
@@ -37,7 +38,7 @@ export function build(view: string, vals: Vals, lang: Loc, card: PreviewCard) {
     const v = textOf(vals, k, lang);
     return `<${tag} class="${cls}" data-k="${k}"${opt ? " data-opt" : ""} data-ph="${esc(ph)}"${opt && !v ? " hidden" : ""}>${esc(v)}</${tag}>`;
   };
-  const img = abs(card.imageUrl) || BACKSIDE;
+  const img = abs(card.imageUrl) || cardTemplate(textOf(vals, "publicTitle", lang) || textOf(vals, "publicTitle", "en"), lang);
   const engImg = abs(card.preview?.image || card.engagementImageUrl);
   const postImg = abs(card.preview?.postImage) || engImg;
   const race = esc(card.preview?.category?.[lang] || card.raceLabel || "Audi Revolut F1® Team");
@@ -111,12 +112,13 @@ export function build(view: string, vals: Vals, lang: Loc, card: PreviewCard) {
       ${T(title, "h2", "text-headline-3 text-weight-normal text-center", false, "Title")}
       ${T(text, "p", "text-copy-2 text-weight-normal text-center", false, "Text")}`.replace(/class="text-headline-3/, 'style="margin-top:20px" class="text-headline-3').replace(/class="text-copy-2 text-weight-normal text-center"/, 'style="margin-top:8px;opacity:.9" class="text-copy-2 text-weight-normal text-center"'),
   });
-  const cell = (h: string, v: string) => `<div style="text-align:center"><p class="text-copy-3 text-weight-normal" style="letter-spacing:.04em;opacity:.7">${h}</p><p class="text-copy-2 text-weight-normal" style="margin-top:4px;min-height:20px">${esc(v)}</p></div>`;
+  // a detail the card does not define yet shows a template status instead of an empty cell
+  const cell = (h: string, v: string, todo = false) => `<div style="text-align:center"><p class="text-copy-3 text-weight-normal" style="letter-spacing:.04em;opacity:.7">${h}</p><p class="text-copy-2 text-weight-normal" style="margin-top:4px;min-height:20px${!v && todo ? ";opacity:.55;font-style:italic" : ""}">${esc(v || (todo ? NOT_DEFINED[lang] : ""))}</p></div>`;
   const back = (text: string) => ({
     body: `<div style="background:#3D3A3A;border-radius:14px;padding:18px 14px 26px">
         <p class="text-headline-4 text-weight-normal" style="text-align:center">Team Card Details</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-          ${cell(de ? "TYP" : "CARD TYPE", card.badgeTypeLabel ?? "")}${cell(de ? "RENNEN" : "RACE", card.raceLabel ?? "")}${cell(de ? "EINGELÖST" : "REDEEMED", "")}${cell(de ? "GESAMMELT AM" : "DATE EARNED", "")}
+          ${cell(de ? "TYP" : "CARD TYPE", card.badgeTypeLabel ?? "", true)}${cell(de ? "RENNEN" : "RACE", card.raceLabel ?? "", true)}${cell(de ? "EINGELÖST" : "REDEEMED", "")}${cell(de ? "GESAMMELT AM" : "DATE EARNED", "")}
         </div></div><div style="flex:1"></div>
       ${T(text, "p", "text-copy-2 text-weight-normal text-center", false, "Text")}`,
   });
