@@ -58,7 +58,11 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
 
     // 2 the card's own content over the template
     const doc: Json = JSON.parse(JSON.stringify(template));
-    doc.title = { en: card.name, de: card.name };
+    // staging titles read "TC-037 | EXCLUSIVE | Nico's Nuvolari Helmet"
+    const typeWord = String(card.brief?.badgeType || "").toUpperCase();
+    const title = [card.id, typeWord, card.name].filter(Boolean).join(" | ");
+    doc.title = { en: title, de: title };
+    const deFallback: string[] = [];
     for (const f of FIELDS) {
       if (f.doc !== "badge") continue;
       const v = card.values[f.key];
@@ -66,9 +70,12 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
       if (f.localized) {
         const lv = v as { en?: string; de?: string };
         if (!lv.en && !lv.de) continue;
-        setPath(doc, f.path, { en: lv.en ?? "", ...(lv.de ? { de: lv.de } : {}) });
+        // the CMS needs every text in both languages: a missing German text gets the English one for now
+        if (!lv.de && lv.en) deFallback.push(f.label);
+        setPath(doc, f.path, { en: lv.en || lv.de || "", de: lv.de || lv.en || "" });
       } else setPath(doc, f.path, v);
     }
+    if (deFallback.length) steps.push({ step: `German missing, English used for now: ${deFallback.join(", ")}`, ok: true });
     if (card.brief?.imageId) doc.badgeImage = card.brief.imageId;
     else steps.push({ step: "no card image yet: the template image stays until one is set", ok: true });
     const tagType = (t: Json, d: string) => (t && typeof t === "object" && t.type ? t.type : d);
@@ -95,7 +102,7 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     steps.push({ step: hub ? `links go to the campaign hub /${camp?.root}` : "campaign hub not on staging: links left generic", ok: true });
 
     // 4 create (idempotent by title)
-    const badgeId = await upsertLocalised("badges", doc, `where[title][equals]=${encodeURIComponent(card.name)}&locale=en`, steps, "card (disabled)");
+    const badgeId = await upsertLocalised("badges", doc, `where[or][0][title][equals]=${encodeURIComponent(title)}&where[or][1][title][equals]=${encodeURIComponent(card.name)}&locale=en`, steps, "card (disabled)");
     card.staging = { ...card.staging, badgeId };
     card.status = "Staging";
     card.updatedAt = new Date().toISOString();
