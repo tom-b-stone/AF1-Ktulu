@@ -4,6 +4,7 @@
 // changed, in which direction, before → after, and lets you approve it.
 // Below: one Figma board per campaign (paste the Figma link) and how to
 // install the plugin. Open to everyone who can sign in.
+import BuildPages from "../BuildPages";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
@@ -11,7 +12,7 @@ type Campaign = { key: string; name: string; root: string; race: string; season:
 
 type Diff = { key: string; pageId: string; page: string; block: string; layer: string; kind?: string; base?: string; cms?: string; figma?: string; state: string };
 type Status = {
-  campaign: { key: string; name: string; figmaFile: string; figmaPage: string };
+  campaign: { key?: string; name: string; figmaFile: string; figmaPage: string };
   pages: { id: string; url: string; title: string }[];
   diffs: Diff[];
   syncedAt: string | null;
@@ -143,6 +144,7 @@ export default function Page() {
         </div>
       </div>
 
+      {tab === "sync" && s && s.campaign.figmaFile && <BuildPages campaign={s.campaign.key ?? ck} campaignName={s.campaign.name} figmaUrl={figmaLink()} hasPages={s.pages.length > 0} onBuilt={() => void load()} />}
       {tab === "sync" && error && <div style={{ color: "#e06c5b" }}>{error}</div>}
       {tab === "sync" && !s && !error && <div style={{ color: "var(--muted)" }}>Checking Figma and the staging CMS…</div>}
 

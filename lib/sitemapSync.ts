@@ -241,7 +241,7 @@ function lexicalText(rt: Json): string {
 }
 
 // ---- field extraction per block -------------------------------------------
-function blockFields(pageId: string, s: Json): Field[] {
+export function blockFields(pageId: string, s: Json): Field[] {
   const out: Field[] = [];
   const k = (path: string) => `${pageId}|${s.id}|${path}`;
   const text = (path: string, layer: string, value: unknown, readonly = false) => out.push({ key: k(path), path, layer, value: str(value), kind: "text", readonly });
@@ -709,10 +709,12 @@ export async function uploadFromFigma(campaign: string, name: string, bytes: Uin
   const [folders, tags] = await Promise.all([listMediaFolders().catch(() => []), listContentTags().catch(() => [])]);
   const folder = folders.find((f) => c.mediaFolder.test(f.name) || c.mediaFolder.test(f.path));
   const tag = tags.find((t) => c.contentTag.test(t.title));
-  const ext = mime.includes("png") ? "png" : "jpg";
-  const safe = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "figma-image";
+  const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
   const blob = new Blob([bytes], { type: mime });
-  const r = await uploadMedia(blob, `${safe}-${Date.now().toString(36)}.${ext}`, alt || name, folder?.id ?? null, tag ? [tag.id] : []);
+  // names that already follow the Asset Uploader rule (audif1_2026_BRA_GP_hero_…) stay as they are
+  const ruled = /^audif1_\d{4}_[A-Z]{3}_/.test(name);
+  const safe = ruled ? name.replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 90) : name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "figma-image";
+  const r = await uploadMedia(blob, ruled ? `${safe}.${ext}` : `${safe}-${Date.now().toString(36)}.${ext}`, alt || name, folder?.id ?? null, tag ? [tag.id] : []);
   return r.id;
 }
 

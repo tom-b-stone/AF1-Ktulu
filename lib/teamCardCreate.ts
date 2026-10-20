@@ -141,7 +141,8 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
       }
     }
     let blockId: string | undefined;
-    if (setup.module?.pageId) blockId = await placeModule(card, badgeId, engagementId, setup.module.pageId, steps).catch((e) => { steps.push({ step: "module not placed", ok: false, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) }); return undefined; });
+    if (setup.module?.fromFigma) blockId = setup.module.blockId;
+    else if (setup.module?.pageId) blockId = await placeModule(card, badgeId, engagementId, setup.module.pageId, steps).catch((e) => { steps.push({ step: "module not placed", ok: false, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) }); return undefined; });
     card.staging = { ...card.staging, badgeId, ...(engagementId ? { engagementId } : {}), ...(blockId ? { pageId: setup.module!.pageId, blockId } : {}) };
     card.brief = { ...(card.brief ?? {}), builtOnStaging: new Date().toISOString() };
     card.status = "Staging";

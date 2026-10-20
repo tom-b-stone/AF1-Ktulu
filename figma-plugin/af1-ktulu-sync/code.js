@@ -857,6 +857,111 @@ async function sync(decisions, only, quiet) {
   return r;
 }
 
+// ---- landing pages from the design → draft pages on staging --------------
+// The designer's pages (a section with a "Mobile / 01 …" frame of library
+// modules) become draft pages on staging. Of several versions of a page the
+// right-most section wins (V1 → V2 → V3 left to right).
+var MOD_BY_KEY = null;
+function moduleKeys() {
+  if (MOD_BY_KEY) return MOD_BY_KEY;
+  MOD_BY_KEY = {};
+  var mods = (state.data && state.data.modules) || {};
+  for (var t in mods) { var m = mods[t]; if (m.key && !MOD_BY_KEY[m.key]) MOD_BY_KEY[m.key] = t; if (m.desktop && m.desktop.key && !MOD_BY_KEY[m.desktop.key]) MOD_BY_KEY[m.desktop.key] = t; }
+  return MOD_BY_KEY;
+}
+var MOD_NAMES = [[/hero/i, "hero"], [/gallery/i, "gallery"], [/showcase/i, "single-card-showcase"], [/engagement.?teaser/i, "badge-engagement-teaser"], [/team.?cards?.?grid|badges?.?grid/i, "badges-grid"], [/carousel/i, "carousel"], [/call.?to.?action/i, "call-to-action"], [/hot.?spot/i, "hot-spot"], [/teaser/i, "teaser"], [/text.?only|free.?text/i, "free-text"]];
+function typeByName(n) { for (var i = 0; i < MOD_NAMES.length; i++) if (MOD_NAMES[i][0].test(n)) return MOD_NAMES[i][1]; return null; }
+async function blockTypeOf(node) {
+  if (node.type === "INSTANCE") {
+    var mc = await node.getMainComponentAsync();
+    if (mc) {
+      var set = mc.parent && mc.parent.type === "COMPONENT_SET" ? mc.parent : null;
+      var key = set ? set.key : mc.key;
+      if (moduleKeys()[key]) return moduleKeys()[key];
+      var byMain = typeByName(set ? set.name : mc.name); if (byMain) return byMain;
+    }
+  }
+  return node.type === "INSTANCE" || node.type === "FRAME" ? typeByName(node.name) : null;
+}
+var CONTEXT = { hero: "hero", gallery: "gallery", carousel: "gallery", "call-to-action": "teaser", teaser: "teaser", "hot-spot": "teaser", "single-card-showcase": "teaser", "badge-engagement-teaser": "teaser", "free-text": "teaser" };
+function designPages(page) {
+  var best = {};
+  page.children.forEach(function (sec) {
+    if (sec.type !== "SECTION") return;
+    var d = readData(sec); if (d && d.type === "section") return; // screens the plugin built itself
+    var mob = sec.children.filter(function (f) { var fd = readData(f); return f.type === "FRAME" && /^Mobile \/ 01\b/.test(f.name) && !(fd && fd.type === "page"); })[0];
+    if (!mob) return;
+    var name = mob.name.replace(/^Mobile \/ 01\s*/, "").trim() || sec.name;
+    var hub = /\bhub\b/i.test(name) || /_hub$/i.test(sec.name);
+    if (hub) name = "Hub";
+    var key = name.toLowerCase();
+    if (!best[key] || sec.x > best[key].sec.x) best[key] = { sec: sec, frame: mob, name: name, hub: hub };
+  });
+  return Object.keys(best).map(function (k) { return best[k]; }).sort(function (a, b) { return a.hub ? -1 : b.hub ? 1 : a.sec.y - b.sec.y; });
+}
+async function pageImage(hash, page, context, ctx) {
+  if (ctx.map[hash]) return ctx.map[hash];
+  var raw = await figma.getImageByHash(hash).getBytesAsync();
+  var enc = await askUI("encode-image", { bytes: Array.from(raw), webp: true });
+  ctx.nn[page] = (ctx.nn[page] || 0) + 1;
+  var r = await api("POST", { action: "upload", page: page, context: context, nn: ctx.nn[page], mime: enc.mime || "image/webp", data: enc.base64, alt: page + ", " + context + " image" });
+  ctx.map[hash] = r.id;
+  return r.id;
+}
+async function readModule(inst, type, bp, page, ctx) {
+  var texts = {}, images = {};
+  for (var i = 0; i < bp.fields.length; i++) {
+    var f = bp.fields[i];
+    if (f.kind === "image") {
+      var h = imageHashOf(findLayer(inst, f.layer, "IMAGE"));
+      if (h) { try { images[f.layer] = await pageImage(h, page, CONTEXT[type] || "teaser", ctx); } catch (e) { log("⚠ image " + inst.name + " · " + f.layer + ": " + (e && e.message ? e.message : e)); } }
+      continue;
+    }
+    var bi = btnIndex(f.layer), v;
+    if (bi >= 0) { var b = buttonsOf(inst)[bi]; v = b ? String(b.componentProperties[propOf(b, "Label", "TEXT")].value) : ""; }
+    else v = getText(inst, f.layer);
+    v = normT(v || "");
+    if (SAMPLE.test(v)) v = "";
+    if (v) texts[f.layer] = v;
+  }
+  return { texts: texts, images: images };
+}
+async function pagesFromDesign() {
+  var page = figma.currentPage;
+  state.data = await api("GET"); MOD_BY_KEY = null;
+  progress("Reading the design …");
+  var bps = (await api("POST", { action: "blueprints" })).blueprints;
+  var found = designPages(page);
+  if (!found.length) { log("No landing pages on this Figma page. Each page needs a section with a frame named “Mobile / 01 …” built from the library modules."); return; }
+  var ctx = { map: JSON.parse(figma.root.getSharedPluginData(NS, "pageimgs") || "{}"), nn: {} };
+  var out = [];
+  for (var i = 0; i < found.length; i++) {
+    var p = found[i];
+    var kids = p.frame.children.filter(function (k) { return k.visible; }).slice().sort(byPos);
+    var mods = [];
+    for (var j = 0; j < kids.length; j++) {
+      var k = kids[j], t = await blockTypeOf(k);
+      if (!t || !bps[t]) { if (k.type === "INSTANCE") log("  " + p.name + ": " + k.name + " skipped (" + (t ? "no " + t + " module on staging" : "not a CMS module") + ")"); continue; }
+      progress("Reading " + p.name + " · " + k.name + " …");
+      var r0 = await readModule(k, t, bps[t], p.name, ctx);
+      mods.push({ blockType: t, name: k.name, texts: r0.texts, images: r0.images });
+    }
+    out.push({ name: p.name, node: p.frame.id, hub: p.hub, modules: mods });
+    log("• " + p.name + ": " + mods.length + " modules");
+  }
+  figma.root.setSharedPluginData(NS, "pageimgs", JSON.stringify(ctx.map));
+  progress("Building the pages on staging …");
+  var r = await api("POST", { action: "build-pages", pages: out });
+  r.steps.forEach(function (s) { log((s.ok ? "" : "⚠ ") + s.step); });
+  for (var c = 0; c < r.cards.length; c++) {
+    progress("Pointing Team Card " + r.cards[c] + " at its page …");
+    try { var cr = await api("POST", { action: "card-links", card: r.cards[c] }); log(r.cards[c] + (cr.ok ? ": links point to its page" : ": ⚠ " + ((cr.steps || []).slice(-1)[0] || {}).detail)); }
+    catch (e) { log("⚠ " + r.cards[c] + ": " + (e && e.message ? e.message : e)); }
+  }
+  await api("POST", { action: "ack-command" }).catch(function () {});
+  log("Done: " + r.pages.length + " draft pages on staging. Open the AF1 Tool to check them.");
+}
+
 setInterval(async function () {
   if (!state.live || state.busy || !state.token) return;
   await artSync(false);
@@ -865,6 +970,7 @@ setInterval(async function () {
   try {
     // a rebuild queued in the AF1 Tool runs even while the plugin stays open
     var d0 = await api("GET"); state.data = d0;
+    if (d0.command && d0.command.command === "pages-from-figma") { log("Building the staging pages from this design (asked in the AF1 Tool) …"); await pagesFromDesign(); await check(); return; }
     if (d0.command && /^build/.test(d0.command.command)) { log("A full rebuild was requested in the AF1 Tool, building now …"); await buildAll(); await check(); return; }
     var r = await sync({}, null, true); if (r.toCms.length || r.toFigma.length) await check();
   }
@@ -885,6 +991,7 @@ figma.ui.onmessage = async function (msg) {
       if (state.token) await loadCampaigns();
       if (state.token && state.campaign && !wrongBoard()) {
         var pre = await api("GET"); state.data = pre;
+        if (pre.command && pre.command.command === "pages-from-figma") { log("Building the staging pages from this design (asked in the AF1 Tool) …"); await pagesFromDesign(); }
         if (pre.command && /^build/.test(pre.command.command)) { log("A full rebuild was requested in the AF1 Tool, building now …"); await buildAll(); }
         await check();
       } else if (state.token) await check();
@@ -898,6 +1005,7 @@ figma.ui.onmessage = async function (msg) {
     if (msg.type === "art-sync") await artSync(true);
     if (msg.type === "art-focus") focusNode(msg.node);
     if (msg.type === "check") await check();
+    if (msg.type === "pages-from-design") { await pagesFromDesign(); await check(); }
     if (msg.type === "build") { await buildAll(); await check(); }
     if (msg.type === "apply") { await sync(msg.decisions, msg.only); await check(); }
   } catch (e) {

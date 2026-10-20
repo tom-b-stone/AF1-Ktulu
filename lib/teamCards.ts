@@ -38,7 +38,8 @@ export type CardRecord = {
 export type SetupItem = { id: string; text: LocValue; mediaId?: string; imageUrl?: string; options?: LocValue[]; correct?: number };
 export type CardSetup = {
   engagement?: { type: "page" | "hot-or-not" | "survey" | "quiz" | "q-and-a"; items: SetupItem[]; bg?: { type: "color" | "image"; color?: string; mediaId?: string; imageUrl?: string } };
-  module?: { pageId?: string; pageUrl?: string; pageTitle?: string };
+  // fromFigma: the page and its modules were built from the Figma design, the card only links to them
+  module?: { pageId?: string; pageUrl?: string; pageTitle?: string; fromFigma?: boolean; blockId?: string };
   reward?: { type: "noReward" | "raffleSignup" | "couponCode" | "downloadAsset" };
   backImageId?: string;
   backImageUrl?: string;

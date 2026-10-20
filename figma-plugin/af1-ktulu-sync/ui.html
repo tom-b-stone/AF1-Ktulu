@@ -53,6 +53,11 @@
     <div id="buildBox"></div>
     <div id="changes"></div>
   </div>
+  <div class="card" id="pagesCard">
+    <strong>Landing pages</strong>
+    <div class="k">Builds the pages on this Figma page as drafts on staging: modules, texts, images and the Team Card of each page. The newest version of a page (right-most) wins.</div>
+    <div class="row"><button id="pagesBuild">Build staging pages from this design</button></div>
+  </div>
   <div class="card" id="artCard">
     <strong>Card images</strong>
     <div class="k" id="artInfo">No card artworks linked in this file yet. Setup, step 3 links them.</div>
@@ -134,6 +139,7 @@
     document.querySelectorAll(".aGo2").forEach((x) => (x.onclick = () => post("art-focus", { node: x.dataset.n })));
     if ($("artNow")) $("artNow").onclick = () => post("art-sync");
   }
+  $("pagesBuild").onclick = () => { log("Reading the landing pages …"); post("pages-from-design"); };
   $("rebuild").onclick = () => { log("Rebuilding all screens …"); post("build"); };
   $("live").onchange = (e) => post("live", { on: e.target.checked });
   $("campaign").onchange = (e) => { log("Switching to " + e.target.selectedOptions[0].textContent + " …"); post("set-campaign", { key: e.target.value }); };

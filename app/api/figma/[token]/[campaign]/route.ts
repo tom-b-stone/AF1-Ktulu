@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvePluginToken } from "@/lib/connectorTokens";
 import { MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, getPending, loadModel, mediaFile, previewSync, uploadFromFigma, getCampaign, listCampaigns } from "@/lib/sitemapSync";
+import { blueprints, buildPagesFromFigma, type FigmaPage } from "@/lib/pagesFromFigma";
+import { createOnStaging } from "@/lib/teamCardCreate";
+import { canonicalLoc } from "@/lib/assetNaming";
+// "São Paulo" → "BRA" via the race list, else the first three letters
+const LOCS: Record<string, string> = { "sao paulo": "BRA", singapore: "SIN", "las vegas": "LVG", qatar: "QAT", "abu dhabi": "UAE", mexico: "MEX", austin: "USA" };
+const plainLoc = (t: string) => { const k = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(); return LOCS[k] ?? k.replace(/[^a-z]/g, "").slice(0, 3).toUpperCase(); };
 import { cardsForArt, linkCardArt, setCardArtHash, setCardImage } from "@/lib/teamCards";
 
 // Endpoint for the "AF1 Ktulu Sync" Figma plugin (figma-plugin/ in this
@@ -91,6 +97,18 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       return json({ error: "unknown action" }, 400);
     }
     if (b?.action === "check") return json(await previewSync(campaign, b.figma ?? {}));
+    // landing pages from the design: what to read per module, then build the draft pages, then each card's links
+    if (b?.action === "blueprints") return json({ blueprints: await blueprints() });
+    if (b?.action === "build-pages") {
+      const pages = ((b as unknown as { pages?: FigmaPage[] }).pages ?? []) as FigmaPage[];
+      const r = await buildPagesFromFigma(campaign, pages, rec.email);
+      console.log(`[figma] ${rec.email} built ${r.pages.length} pages for ${campaign} from Figma`);
+      return json(r);
+    }
+    if (b?.action === "card-links") {
+      const id = String((b as unknown as { card?: string }).card ?? "");
+      return json(await createOnStaging(id, rec.email));
+    }
     if (b?.action === "ack-command") {
       await clearCommand(campaign);
       return json({ ok: true });
@@ -98,6 +116,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (b?.action === "ack") return json({ remaining: await ackPending(campaign, b.keys ?? []) });
     if (b?.action === "upload") {
       if (!b.data) return json({ error: "no image data" }, 400);
+      // page images from the design follow the Asset Uploader rule: audif1_{year}_{LOC}_GP_{context}_{descriptor}_{nn}
+      const pg = b as unknown as { page?: string; context?: string; nn?: number };
+      if (pg.page && pg.context) {
+        const c = await getCampaign(campaign);
+        const loc = canonicalLoc(plainLoc(c?.race || c?.name || campaign)) || plainLoc(c?.race || campaign);
+        const desc = pg.page.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        b.name = `audif1_${c?.season || "2026"}_${loc}_GP_${pg.context}_${desc}_${String(pg.nn ?? 1).padStart(2, "0")}`;
+      }
       const id = await uploadFromFigma(campaign, b.name ?? "figma-image", Uint8Array.from(Buffer.from(b.data, "base64")), b.mime ?? "image/jpeg", b.alt ?? "");
       console.log(`[sitemap] ${rec.email} uploaded image from Figma → ${id}`);
       return json({ id });

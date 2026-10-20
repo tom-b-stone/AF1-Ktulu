@@ -10,13 +10,14 @@
 // "Save" keeps it in Ktulu; "Save and update staging" builds card, engagement
 // and module on staging (the parent asks first).
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import BuildPages from "./BuildPages";
 
 type LV = { en?: string; de?: string };
 type Item = { id: string; text: LV; mediaId?: string; imageUrl?: string; options?: LV[] };
 type EngType = "page" | "hot-or-not" | "survey" | "quiz" | "q-and-a";
 export type Setup = {
   engagement?: { type: EngType; items: Item[]; bg?: { type: "color" | "image"; color?: string; mediaId?: string; imageUrl?: string } };
-  module?: { pageId?: string; pageUrl?: string; pageTitle?: string };
+  module?: { pageId?: string; pageUrl?: string; pageTitle?: string; fromFigma?: boolean; blockId?: string };
   reward?: { type: "noReward" | "raffleSignup" | "couponCode" | "downloadAsset" };
   backImageId?: string;
   backImageUrl?: string;
@@ -106,7 +107,7 @@ export default function SetupStep({
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [types, setTypes] = useState<string[]>([]);
-  const [campaigns, setCampaigns] = useState<{ name: string; root: string; race: string }[]>([]);
+  const [campaigns, setCampaigns] = useState<{ key: string; name: string; root: string; race: string; figmaUrl?: string; figmaFile?: string }[]>([]);
   const [pages, setPages] = useState<{ id: string; url: string; title: string }[]>([]);
   const [q, setQ] = useState("");
 
@@ -247,7 +248,8 @@ export default function SetupStep({
         <div style={{ color: C.mute, fontSize: 12 }}>The page that shows the card&apos;s module with the task. It is added at the end of the page as a draft; move it in the CMS if needed.</div>
         <input style={input} placeholder={`Search pages${camp?.root ? ` (showing /${camp.root}…)` : ""}`} value={q} onChange={(e) => setQ(e.target.value)} />
         <div style={{ display: "grid", gap: 4, maxHeight: 220, overflow: "auto" }}>
-          {pages.length === 0 && <div style={{ color: C.mute, fontSize: 12 }}>No pages found on staging{camp?.root ? ` under /${camp.root}` : ""}. Search for another one, or create the page in the CMS first.</div>}
+          {pages.length === 0 && !q && camp?.figmaFile && <BuildPages compact campaign={camp.key} campaignName={camp.name} figmaUrl={camp.figmaUrl} hasPages={false} />}
+          {pages.length === 0 && (q || !camp?.figmaFile) && <div style={{ color: C.mute, fontSize: 12 }}>No pages found on staging{camp?.root ? ` under /${camp.root}` : ""}. Search for another one, or create the page in the CMS first.</div>}
           {pages.map((p) => {
             const on = setup.module?.pageId === p.id;
             return (
