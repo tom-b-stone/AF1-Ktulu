@@ -24,6 +24,7 @@ export const TOOL_LABEL: Record<string, string> = {
   "/seo": "SEO Studio",
   "/photobook": "GP Mini-Zine",
   "/teamcards": "Team Cards",
+  "/figma": "Figma Sync",
   "/images": "CRM Images",
 };
 
@@ -32,7 +33,9 @@ export const RELEASE: Record<string, { status: ReleaseStatus; paths: string[]; m
   "/assets": { status: "test", paths: ["/assets", "/api/assets"], mcp: /^(asset_|library_|knowledge_|learn_person$)/ },
   "/seo": { status: "test", paths: ["/seo", "/api/seo"], mcp: /^seo_/ },
   "/photobook": { status: "test", paths: ["/photobook", "/api/photobook", "/api/zine"] },
-  "/teamcards": { status: "dev", paths: ["/teamcards", "/api/teamcards", "/api/sitemap", "/api/captures"], mcp: /^(teamcard_|sitemap_|sitecopy_)/ },
+  "/teamcards": { status: "dev", paths: ["/teamcards", "/api/teamcards", "/api/captures"], mcp: /^(teamcard_|sitecopy_)/ },
+  // the Figma plugin and its page: everyone who can sign in (the plugin authenticates with a personal token)
+  "/figma": { status: "live", paths: ["/figma", "/api/sitemap"], mcp: /^sitemap_/ },
   "/images": { status: "plan", paths: ["/images"] },
 };
 

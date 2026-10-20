@@ -17,17 +17,22 @@
   #log { font-size: 11px; color: var(--muted); white-space: pre-wrap; margin-top: 8px; max-height: 90px; overflow: auto; }
   .err { color: var(--lava); }
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); }
+  select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--ink); font: inherit; }
+  .head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .warn { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--lava); margin: 10px 0; }
+  .warn a { color: var(--lava); }
 </style>
-<h1>AF1 Ktulu Sync · Singapore</h1>
-<p>Figma, the AF1 Tool and staging stay in the same state.</p>
+<div class="head"><h1>AF1 Ktulu Sync</h1><select id="campaign" hidden title="Campaign of this board"></select></div>
+<p id="sub">Figma, the AF1 Tool and staging stay in the same state.</p>
 
 <div id="tokenBox" hidden>
-  <p>Paste your plugin token (AF1 Tool → Team Cards → Sitemap Sync → "Figma plugin token").</p>
+  <p>Paste your plugin token (af1-ktulu.vercel.app/figma → "Create plugin token").</p>
   <div class="row"><input type="text" id="token" placeholder="token" /><button class="primary" id="saveToken">Connect</button></div>
 </div>
 
 <div id="main" hidden>
   <div class="status" id="status">…</div>
+  <div id="stale"></div>
   <div id="progress"></div>
   <div id="buildBox"></div>
   <div id="changes"></div>
@@ -52,9 +57,28 @@
   $("changeToken").onclick = () => { $("tokenBox").hidden = false; };
   $("rebuild").onclick = () => { log("Rebuilding all screens …"); post("build"); };
   $("live").onchange = (e) => post("live", { on: e.target.checked });
+  $("campaign").onchange = (e) => { log("Switching to " + e.target.selectedOptions[0].textContent + " …"); post("set-campaign", { key: e.target.value }); };
+  const BP = { mobile: "mobile", desktop: "desktop", screen: "screen" };
+
+  function campaigns(m) {
+    const sel = $("campaign");
+    sel.hidden = m.list.length < 2 && !!m.current;
+    sel.innerHTML = (m.current ? "" : `<option value="">Pick the campaign …</option>`) + m.list.map((c) => `<option value="${esc(c.key)}" ${c.key === m.current ? "selected" : ""}>${esc(c.name)}${c.board ? "" : " (no board yet)"}</option>`).join("");
+    const cur = m.list.find((c) => c.key === m.current);
+    $("sub").textContent = cur ? `${cur.name} · Figma, the AF1 Tool and staging stay in the same state.` : "Which campaign is this board for?";
+  }
 
   function render(m) {
-    $("tokenBox").hidden = true; $("main").hidden = false; $("live").checked = m.live;
+    $("tokenBox").hidden = true; $("main").hidden = false;
+    if (m.pick) { $("status").innerHTML = "<strong>Pick the campaign of this board</strong> (top right). Boards are set on af1-ktulu.vercel.app/figma."; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
+    if (m.wrong) { $("status").innerHTML = `<div class="warn"><strong>This file is not the board of ${esc(m.name)}.</strong><br>Nothing is built or synced here. ${m.boardUrl ? `Open <a href="${esc(m.boardUrl)}" target="_blank">its board</a>, pick another campaign, or` : "Pick another campaign or"} set this file as its board on af1-ktulu.vercel.app/figma.</div>`; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
+    $("live").checked = m.live;
+    const st = m.stale || [];
+    $("stale").innerHTML = st.length ? `<div class="warn"><strong>${st.length} text${st.length === 1 ? "" : "s"} changed on one screen only</strong><br>` +
+      st.slice(0, 6).map((x) => `<div class="k" style="margin-top:6px">${esc(x.module)} · ${esc(x.layer)} · changed on <b>${BP[x.from]}</b>, ${x.to.map((t) => BP[t]).join(" + ")} still shows the old text</div><div class="v">${esc(x.value)}</div>`).join("") +
+      (st.length > 6 ? `<div class="k">… and ${st.length - 6} more</div>` : "") +
+      `<div class="row"><button class="primary" id="across">Apply to ${[...new Set(st.flatMap((x) => x.to))].map((t) => BP[t]).join(" + ")} too and sync</button></div><div class="k">With live sync on this happens by itself within 20 s: ${BP[st[0].from]} → Ktulu → ${st[0].to.map((t) => BP[t]).join(" + ")}.</div></div>` : "";
+    if (st.length) $("across").onclick = () => { log("Copying to the other screen …"); post("copy-across", { keys: st.map((x) => x.key) }); };
     $("status").innerHTML = m.built === 0
       ? `<strong>No screens in Figma yet.</strong> ${m.pages} pages are ready on staging.`
       : `<strong>${m.built}/${m.pages} pages in Figma · ${m.inSync}/${m.total} fields in sync.</strong>` + (m.syncedAt ? `<br><span class="k">Last sync ${new Date(m.syncedAt).toLocaleString()}</span>` : "");
@@ -99,6 +123,7 @@
     if (m.type === "encode-image") { try { const j = await toJpeg(new Blob([new Uint8Array(m.bytes)]), 2400, 0.85); let b = ""; for (let i = 0; i < j.length; i += 0x8000) b += String.fromCharCode.apply(null, j.subarray(i, i + 0x8000)); reply(m.reqId, { base64: btoa(b) }); } catch (err) { reply(m.reqId, null, err.message); } return; }
     if (m.type === "token") { $("token").value = m.token; if (!m.token) $("tokenBox").hidden = false; }
     if (m.type === "checked") render(m);
+    if (m.type === "campaigns") campaigns(m);
     if (m.type === "progress") $("progress").textContent = m.msg;
     if (m.type === "synced") log(`Applied: ${m.toCms} to the CMS, ${m.toFigma} into Figma` + (m.open ? `, ${m.open} left` : "") + "." + (m.written.length ? "\n" + m.written.join("\n") : ""));
     if (m.type === "log") log(m.msg);

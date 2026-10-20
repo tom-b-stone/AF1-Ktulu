@@ -11,11 +11,17 @@
 // Tagged nodes carry shared plugin data (namespace "af1", key "sync"):
 //   page frame : { type:"page", url, stagingId }
 //   module/card: { type:"block"|"card", fields:[{key,layer,kind}], last:{}, imgs:{} }
+//
+// One Figma board per campaign (set on af1-ktulu.vercel.app/figma): the plugin
+// picks the campaign whose board is this file. The choice is kept in the file
+// (shared plugin data "af1"/"campaign") when Figma doesn't tell the file key.
+// A text changed on a mobile screen goes to the CMS and from there onto every
+// other screen with the same field (desktop), right in the same sync.
 
 var BASE = "https://af1-ktulu.vercel.app/api/figma/";
 var NS = "af1";
 var STATIC_AUDI = { "Audi Type Variable": "Audi Type" };
-var state = { token: "", campaign: "sin", data: null, live: true, busy: false };
+var state = { token: "", campaign: "", campaigns: [], data: null, live: true, busy: false };
 
 figma.showUI(__html__, { width: 440, height: 600, themeColors: true });
 
@@ -24,7 +30,7 @@ function log(msg) { send("log", { msg: msg }); }
 function progress(msg) { send("progress", { msg: msg }); }
 function readData(n) { var s = n.getSharedPluginData(NS, "sync"); if (!s) return null; try { return JSON.parse(s); } catch (e) { return null; } }
 function writeData(n, d) { n.setSharedPluginData(NS, "sync", JSON.stringify(d)); }
-function apiUrl() { return BASE + encodeURIComponent(state.token) + "/" + state.campaign; }
+function apiUrl(c) { return BASE + encodeURIComponent(state.token) + "/" + (c || state.campaign); }
 function mediaUrl(id) { return apiUrl() + "?media=" + encodeURIComponent(id); }
 function solid(r, g, b) { return [{ type: "SOLID", color: { r: r, g: g, b: b } }]; }
 var GRAPH = solid(0.169, 0.161, 0.161), CHALK = solid(0.961, 0.949, 0.949), MUTED = solid(0.463, 0.451, 0.451), LAVA = solid(1, 0.176, 0);
@@ -32,8 +38,9 @@ var GRAPH = solid(0.169, 0.161, 0.161), CHALK = solid(0.961, 0.949, 0.949), MUTE
 var DARK = solid(0.118, 0.114, 0.114), ON_DARK = solid(0.961, 0.949, 0.949), ON_DARK_MUTED = solid(0.65, 0.64, 0.64);
 function autoLayout(dir) { var f = figma.createFrame(); f.layoutMode = dir; f.primaryAxisSizingMode = "AUTO"; f.counterAxisSizingMode = "AUTO"; f.fills = []; return f; }
 
-async function api(method, body) {
-  var res = await fetch(apiUrl(), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+async function api(method, body, c) {
+  if (!c && !state.campaign) throw new Error("Pick the campaign of this board first.");
+  var res = await fetch(apiUrl(c), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   var j = await res.json();
   if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
   return j;
@@ -248,8 +255,10 @@ async function applyFields(node, values, fresh) {
 
 // ---- Figma state ----------------------------------------------------------
 function tagged(page) { return page.findAll(function (n) { return (n.type === "INSTANCE" || n.type === "FRAME") && !!n.getSharedPluginData(NS, "sync"); }); }
+// desktop / mobile: from the page frame the node sits in
+function bpOf(n) { var p = n; while (p && p.type !== "PAGE") { if (/^Desktop \//.test(p.name)) return "desktop"; if (/^Mobile \//.test(p.name)) return "mobile"; p = p.parent; } return "screen"; }
 function collect(page) {
-  var values = {}, changed = {}, nodes = {}, byKey = {}, uploads = [];
+  var values = {}, changed = {}, nodes = {}, byKey = {}, uploads = [], texts = {};
   var all = tagged(page);
   for (var i = 0; i < all.length; i++) {
     var n = all[i], d = readData(n); if (!d) continue;
@@ -264,10 +273,21 @@ function collect(page) {
         if (rec.hash === h) v = rec.id; else { uploads.push({ node: n, field: f, layer: layer, hash: h }); v = "upload:" + h; }
       } else { v = getText(n, f.layer); if (v === undefined) continue; }
       var isChange = !d.last || d.last[f.key] !== v;
+      if (f.kind !== "image") (texts[f.key] = texts[f.key] || []).push({ bp: bpOf(n), v: v, changed: isChange && !!d.last && f.key in d.last, name: n.name.split(" · ")[0], layer: f.layer });
       if (!(f.key in values) || (isChange && !changed[f.key])) { values[f.key] = v; if (isChange) changed[f.key] = true; }
     }
   }
-  return { values: values, nodes: nodes, byKey: byKey, uploads: uploads };
+  // the same field on another screen still shows the old text (e.g. changed on mobile, desktop not yet)
+  var stale = [];
+  for (var key in texts) {
+    var t = texts[key], ch = t.filter(function (x) { return x.changed; })[0];
+    if (!ch) continue;
+    var old = t.filter(function (x) { return normT(x.v) !== normT(ch.v); });
+    if (!old.length) continue;
+    var to = []; old.forEach(function (x) { if (to.indexOf(x.bp) < 0) to.push(x.bp); });
+    stale.push({ key: key, from: ch.bp, to: to, value: ch.v, layer: ch.layer, module: ch.name.replace(/^\d+ /, "") });
+  }
+  return { values: values, nodes: nodes, byKey: byKey, uploads: uploads, stale: stale };
 }
 async function runUploads(c) {
   var done = {};
@@ -290,10 +310,46 @@ async function writeKeys(map, byKey) {
   for (var i = 0; i < nodes.length; i++) (await applyFields(nodes[i], map)).forEach(function (k) { if (done.indexOf(k) < 0) done.push(k); });
   return done;
 }
+// ---- campaign of this board -------------------------------------------------
+function fileKey() { try { return figma.fileKey || ""; } catch (e) { return ""; } }
+function campaignOf(key) { return state.campaigns.filter(function (c) { return c.key === key; })[0] || null; }
+function camp() { return (state.data && state.data.campaign) || campaignOf(state.campaign) || { key: state.campaign, name: state.campaign, root: "" }; }
+function prefix() { return String(camp().key || "").toUpperCase(); }
+// this file belongs to another campaign's board → no build, no sync here
+function wrongBoard() {
+  var c = campaignOf(state.campaign), fk = fileKey();
+  return !!(c && c.figmaFile && fk && c.figmaFile !== fk);
+}
+async function loadCampaigns() {
+  var res = await fetch(apiUrl("_campaigns")), j = await res.json();
+  if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
+  state.campaigns = j.campaigns || [];
+  var fk = fileKey(), saved = figma.root.getSharedPluginData(NS, "campaign");
+  var onBoard = fk ? state.campaigns.filter(function (c) { return c.figmaFile === fk; }) : [];
+  var pick = null;
+  if (onBoard.length === 1) pick = onBoard[0].key;
+  else if (onBoard.length > 1) pick = (onBoard.filter(function (c) { return c.key === saved; })[0] || onBoard.filter(function (c) { return c.figmaPage === figma.currentPage.id; })[0] || onBoard[0]).key;
+  else if (saved && campaignOf(saved)) pick = saved;
+  else if (state.campaigns.length === 1) pick = state.campaigns[0].key;
+  state.campaign = pick || "";
+  if (pick) figma.root.setSharedPluginData(NS, "campaign", pick);
+  sendCampaigns();
+}
+function sendCampaigns() {
+  var c = campaignOf(state.campaign);
+  send("campaigns", { list: state.campaigns.map(function (x) { return { key: x.key, name: x.name, figmaUrl: x.figmaUrl, board: !!x.figmaFile }; }), current: state.campaign, wrong: wrongBoard(), boardUrl: c ? c.figmaUrl : "", fileKnown: !!fileKey() });
+}
 async function goToCampaignPage() {
+  if (wrongBoard()) throw new Error("This file is not the Figma board of " + camp().name + ". Open its board, or change the board on af1-ktulu.vercel.app/figma.");
   var id = state.data && state.data.campaign && state.data.campaign.figmaPage;
   var page = id ? await figma.getNodeByIdAsync(id) : null;
-  if (page && page.type === "PAGE" && figma.currentPage !== page) await figma.setCurrentPageAsync(page);
+  if (!(page && page.type === "PAGE")) {
+    // no page given (or not in this file): the campaign's own page, made once
+    var name = "AF1 · " + camp().name;
+    page = figma.root.children.filter(function (x) { return x.name === name; })[0] || null;
+    if (!page) { page = figma.createPage(); page.name = name; }
+  }
+  if (figma.currentPage !== page) await figma.setCurrentPageAsync(page);
   return figma.currentPage;
 }
 
@@ -458,7 +514,7 @@ async function authPills(sec, fr, p, x0) {
   }
 }
 
-function cleanTitle(t) { return String(t || "").replace(/^\s*SIN\s*\|\s*/i, ""); }
+function cleanTitle(t) { return String(t || "").replace(/^\s*[A-Z]{2,4}\s*\|\s*/, ""); }
 
 // one Team Card state: a phone with the overlay, title + Payload note above
 async function stateScreen(sec, card, s, n, x, y) {
@@ -529,7 +585,7 @@ async function journey(sec, card, from, Y) {
 
 // one section per landing page; the activation page also gets the card journey
 async function buildSection(p, num, card, group, isMain, mainUrl, ov) {
-  var sec = figma.createSection(); sec.name = "SIN · " + String(num).padStart(2, "0") + " · " + cleanTitle(p.title);
+  var sec = figma.createSection(); sec.name = prefix() + " · " + String(num).padStart(2, "0") + " · " + cleanTitle(p.title);
   sec.fills = SP_BG; sec.x = -60000; sec.y = 0;
   writeData(sec, { type: "section", url: p.url, group: group.key });
   try {
@@ -589,7 +645,7 @@ async function contents(page, secs, ov) {
   var s2 = figma.createText(); f.appendChild(s2); s2.fontName = { family: "Inter", style: "Regular" }; s2.fontSize = 18; s2.characters = "Click a page to jump to its desktop, mobile and Team Card journey."; s2.fills = ON_DARK_MUTED;
   secs.forEach(function (s) {
     var t = figma.createText(); f.appendChild(t); t.fontName = { family: "Inter", style: "Regular" }; t.fontSize = 26;
-    t.characters = s.name.replace(/^SIN · /, ""); t.fills = ON_DARK; t.textDecoration = "UNDERLINE"; t.hyperlink = { type: "NODE", value: s.id };
+    t.characters = s.name.replace(/^[A-Z0-9-]+ · /, ""); t.fills = ON_DARK; t.textDecoration = "UNDERLINE"; t.hyperlink = { type: "NODE", value: s.id };
   });
   f.x = ov ? ov.x + ov.width + 300 : -1200; f.y = 0;
   return f;
@@ -604,7 +660,7 @@ async function linkOverview(page, secByUrl) {
   for (var i = 0; i < boxes.length; i++) {
     var c = boxes[i], url = null;
     if (c.name.indexOf("page:") === 0) url = c.name.slice(5);
-    else if (c.name in TILE) url = TILE[c.name] ? "unlock-singapore/" + TILE[c.name] : "unlock-singapore";
+    else if (c.name in TILE && camp().root === "unlock-singapore") url = TILE[c.name] ? "unlock-singapore/" + TILE[c.name] : "unlock-singapore";
     if (!url || !secByUrl[url]) continue;
     var texts = c.findAll(function (x) { return x.type === "TEXT"; });
     var title = texts.filter(function (x) { return x.name === "Title"; })[0] || texts.filter(function (x) { return x.fontName !== figma.mixed && /Bold/.test(x.fontName.style); })[0] || texts[0];
@@ -638,7 +694,7 @@ async function buildAll() {
   arrange(page, secs);
   // QR pages: their note links to the activation page
   page.findAll(function (n) { return n.type === "TEXT" && n.name === "Same card note"; }).forEach(function (t) {
-    var m = t.characters.match(/\/(unlock-singapore[^ ]*)/); if (m && secByUrl[m[1]]) t.hyperlink = { type: "NODE", value: secByUrl[m[1]].id };
+    var m = t.characters.match(/\/([^ ]+) →/); if (m && secByUrl[m[1]]) t.hyperlink = { type: "NODE", value: secByUrl[m[1]].id };
   });
   var links = await linkOverview(page, secByUrl);
   await contents(page, secs, ov);
@@ -651,6 +707,9 @@ async function buildAll() {
 
 // ---- sync ----------------------------------------------------------------
 async function check() {
+  sendCampaigns();
+  if (!state.campaign) { send("checked", { pick: true }); return null; }
+  if (wrongBoard()) { send("checked", { wrong: true, name: camp().name, boardUrl: (campaignOf(state.campaign) || {}).figmaUrl }); return null; }
   state.data = await api("GET");
   var page = await goToCampaignPage(), c = collect(page);
   var forCheck = {}; for (var k in c.values) if (String(c.values[k]).indexOf("upload:") !== 0) forCheck[k] = c.values[k];
@@ -659,9 +718,19 @@ async function check() {
   send("checked", {
     pages: state.data.pages.length, built: builtPages, command: state.data.command,
     diffs: pre.diffs.filter(function (d) { return d.state !== "missing-in-figma"; }), uploads: c.uploads.length,
+    stale: c.stale, campaign: camp().name,
     inSync: pre.inSync, total: pre.total, pending: Object.keys(state.data.pending || {}).length, user: state.data.user, syncedAt: pre.syncedAt, live: state.live,
   });
   return pre;
+}
+
+// the stale screens take the changed text, then the change goes to the CMS
+async function copyAcross(keys) {
+  var page = await goToCampaignPage(), c = collect(page), map = {};
+  c.stale.forEach(function (x) { if (!keys || keys.indexOf(x.key) >= 0) map[x.key] = x.value; });
+  var w = await writeKeys(map, c.byKey);
+  log("Copied " + w.length + " text(s) to the other screen.");
+  await sync({}, Object.keys(map));
 }
 
 // only: list of field keys to apply (null = everything that has a newer side)
@@ -679,6 +748,13 @@ async function sync(decisions, only, quiet) {
   var body = { action: "sync", figma: c.values, nodes: c.nodes, decisions: decisions || {} };
   if (only) body.only = only;
   var r = await api("POST", body);
+  // what went to the CMS also goes onto every other screen with that field (mobile → desktop and back)
+  var across = {}, nAcross = 0;
+  r.toCms.forEach(function (d) { if ((c.byKey[d.key] || []).length > 1) { across[d.key] = d.figma || ""; nAcross++; } });
+  // already in the CMS (synced before this existed): the old screen just catches up
+  var openKeys = {}; r.open.forEach(function (d) { openKeys[d.key] = true; });
+  (c.stale || []).forEach(function (x) { if (!(x.key in across) && !openKeys[x.key] && String(c.values[x.key]) === String(x.value)) { across[x.key] = x.value; nAcross++; } });
+  if (nAcross) { var wa = await writeKeys(across, c.byKey); if (wa.length) log("Copied " + wa.length + " change(s) to the other screen (mobile ↔ desktop)."); }
   var map = {}; r.toFigma.forEach(function (d) { map[d.key] = d.cms || ""; });
   var w2 = await writeKeys(map, c.byKey);
   if (r.toFigma.length) await api("POST", { action: "ack", keys: r.toFigma.map(function (d) { return d.key; }) });
@@ -688,7 +764,7 @@ async function sync(decisions, only, quiet) {
 }
 
 setInterval(async function () {
-  if (!state.live || state.busy || !state.token) return;
+  if (!state.live || state.busy || !state.token || !state.campaign || wrongBoard()) return;
   state.busy = true;
   try {
     // a rebuild queued in the AF1 Tool runs even while the plugin stays open
@@ -710,13 +786,16 @@ figma.ui.onmessage = async function (msg) {
       state.token = (await figma.clientStorage.getAsync("token")) || "";
       var lv = await figma.clientStorage.getAsync("live"); state.live = lv === undefined ? true : !!lv;
       send("token", { token: state.token });
-      if (state.token) {
+      if (state.token) await loadCampaigns();
+      if (state.token && state.campaign && !wrongBoard()) {
         var pre = await api("GET"); state.data = pre;
         if (pre.command && /^build/.test(pre.command.command)) { log("A full rebuild was requested in the AF1 Tool, building now …"); await buildAll(); }
         await check();
       }
     }
-    if (msg.type === "save-token") { state.token = msg.token.trim(); await figma.clientStorage.setAsync("token", state.token); await check(); }
+    if (msg.type === "save-token") { state.token = msg.token.trim(); await figma.clientStorage.setAsync("token", state.token); await loadCampaigns(); await check(); }
+    if (msg.type === "set-campaign") { state.campaign = msg.key; state.data = null; figma.root.setSharedPluginData(NS, "campaign", msg.key); await check(); }
+    if (msg.type === "copy-across") { await copyAcross(msg.keys); await check(); }
     if (msg.type === "check") await check();
     if (msg.type === "build") { await buildAll(); await check(); }
     if (msg.type === "apply") { await sync(msg.decisions, msg.only); await check(); }

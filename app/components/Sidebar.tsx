@@ -49,7 +49,7 @@ const SIDEBARS: Record<string, Section[]> = {
       title: "Team Cards",
       entries: [
         { href: "/teamcards", label: "All cards", hint: "Edit texts and see the whole journey", exact: true },
-        { href: "/teamcards/sitemap", label: "Figma ↔ CMS changes", hint: "What changed where; approve it" },
+        { href: "/figma", label: "Figma Sync", hint: "Figma ↔ CMS changes, boards, plugin" },
       ],
     },
     {
@@ -57,6 +57,16 @@ const SIDEBARS: Record<string, Section[]> = {
       entries: [
         { href: "https://www.figma.com/design/rGxt5J0qhiK759uEbaKgTO/WorkingDoc?node-id=692-56", label: "Figma file", note: "↗", hint: "Opens in the Figma app" },
         { href: "https://staging.audif1team.com/cms/admin/collections/badges", label: "Cards in the CMS", note: "↗", hint: "Staging admin" },
+      ],
+    },
+  ],
+  "/figma": [
+    {
+      title: "Figma Sync",
+      entries: [
+        { href: "/figma", label: "Changes", hint: "What changed where; approve it", exact: true },
+        { href: "/figma#boards", label: "Campaign boards", hint: "One Figma board per campaign" },
+        { href: "/figma#plugin", label: "Install the plugin", hint: "Figma desktop, 2 minutes" },
       ],
     },
   ],

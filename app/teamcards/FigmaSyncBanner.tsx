@@ -50,7 +50,7 @@ export default function FigmaSyncBanner() {
           </a>
         )}
         {(fromFigma > 0 || conflicts > 0) && (
-          <Link className="btn" href="/teamcards/sitemap">
+          <Link className="btn" href="/figma">
             Review
           </Link>
         )}

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvePluginToken } from "@/lib/connectorTokens";
-import { CAMPAIGNS, MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, getPending, loadModel, mediaFile, previewSync, uploadFromFigma } from "@/lib/sitemapSync";
+import { MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, getPending, loadModel, mediaFile, previewSync, uploadFromFigma, getCampaign, listCampaigns } from "@/lib/sitemapSync";
 
 // Endpoint for the "AF1 Ktulu Sync" Figma plugin (figma-plugin/ in this
 // repo). The plugin runs in Figma's sandbox (origin "null"), so it can't
 // carry the session cookie: it authenticates with a personal plugin token in
-// the path (Team Cards → Sitemap Sync → "Figma plugin token").
+// the path (Figma Sync → "Create plugin token").
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,7 +16,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: CORS });
-const NO_TOKEN = "Unknown token. Create one in the AF1 Tool under Team Cards → Sitemap Sync.";
+const NO_TOKEN = "Unknown token. Create one in the AF1 Tool under Figma Sync.";
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS });
@@ -28,7 +28,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const rec = await resolvePluginToken(ctx.params.token);
   if (!rec) return json({ error: NO_TOKEN }, 401);
   const campaign = ctx.params.campaign;
-  const c = CAMPAIGNS[campaign];
+  // "_campaigns" → every campaign and its Figma board, so the plugin can pick the one of the open file
+  if (campaign === "_campaigns") return json({ campaigns: await listCampaigns(), user: rec.email });
+  const c = await getCampaign(campaign);
   if (!c) return json({ error: "unknown campaign" }, 404);
   // ?media=<id> → the image itself (for the plugin's image fills)
   const media = req.nextUrl.searchParams.get("media");

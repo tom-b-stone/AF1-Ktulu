@@ -45,6 +45,12 @@ const TILES: { title: string; href: string; key: string; external?: boolean; tex
     text: "All Team Cards, guided editing with a live journey preview, and a helper for bulk changes in EN and DE.",
   },
   {
+    title: "Figma Sync",
+    href: "/figma",
+    key: "/figma",
+    text: "The Figma plugin: campaign pages from staging on one board per campaign, text changes back to the CMS.",
+  },
+  {
     title: "CRM Images",
     href: "/images",
     key: "/images",

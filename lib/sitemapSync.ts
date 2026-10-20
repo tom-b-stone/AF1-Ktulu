@@ -68,6 +68,120 @@ export const CAMPAIGNS: Record<string, Campaign> = {
   },
 };
 
+// ---- campaign boards ----------------------------------------------------------
+// One Figma board per campaign. Singapore is configured above; more campaigns
+// (and the Figma board of any campaign) are set in the AF1 Tool on /figma and
+// stored in KV. A campaign without groups gets them from its staging pages:
+// the root page is the hub, every page one level below is an activation
+// (its deeper pages, e.g. QR landing pages, join it).
+export type CampaignSettings = { key: string; name: string; root: string; race: string; season: string; figmaUrl?: string; figmaFile?: string; figmaPage?: string; updatedAt?: string; by?: string };
+const kCampaigns = "sitemap:campaigns:v1";
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// https://www.figma.com/design/<fileKey>/<name>?node-id=692-56 → file + page/node id
+export function parseFigmaUrl(url: string): { fileKey: string; nodeId?: string } | null {
+  const m = /figma\.com\/(?:design|file)\/([A-Za-z0-9]+)(?:\/branch\/([A-Za-z0-9]+))?/.exec(url ?? "");
+  if (!m) return null;
+  const node = /[?&]node-id=([0-9]+)[-:]([0-9]+)/.exec(url);
+  return { fileKey: m[2] ?? m[1], nodeId: node ? `${node[1]}:${node[2]}` : undefined };
+}
+
+async function campaignSettings(): Promise<Record<string, CampaignSettings>> {
+  const raw = await kvGet(kCampaigns).catch(() => null);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, CampaignSettings>;
+  } catch {
+    return {};
+  }
+}
+
+function fromSettings(s: CampaignSettings, base?: Campaign): Campaign {
+  const words = [s.race, s.name].filter(Boolean).map(esc).join("|") || esc(s.key);
+  return {
+    key: s.key,
+    name: s.name || base?.name || s.key,
+    root: s.root || base?.root || "",
+    figmaFile: s.figmaFile ?? base?.figmaFile ?? "",
+    figmaPage: s.figmaPage ?? base?.figmaPage ?? "",
+    mediaFolder: base?.mediaFolder ?? new RegExp(words, "i"),
+    contentTag: base?.contentTag ?? new RegExp(words, "i"),
+    groups: base?.groups ?? [],
+    race: s.race || base?.race || "",
+    season: s.season || base?.season || "",
+  };
+}
+
+export async function getCampaign(key: string): Promise<Campaign | null> {
+  const set = (await campaignSettings())[key];
+  const base = CAMPAIGNS[key];
+  if (!set) return base ?? null;
+  return fromSettings(set, base);
+}
+
+export async function listCampaigns(): Promise<(Omit<Campaign, "mediaFolder" | "contentTag" | "groups"> & { figmaUrl: string; custom: boolean })[]> {
+  const set = await campaignSettings();
+  const keys = [...new Set([...Object.keys(CAMPAIGNS), ...Object.keys(set)])];
+  const out = [];
+  for (const k of keys) {
+    const c = (await getCampaign(k))!;
+    const url = set[k]?.figmaUrl || (c.figmaFile ? `https://www.figma.com/design/${c.figmaFile}/Board${c.figmaPage ? `?node-id=${c.figmaPage.replace(":", "-")}` : ""}` : "");
+    out.push({ key: c.key, name: c.name, root: c.root, figmaFile: c.figmaFile, figmaPage: c.figmaPage, race: c.race, season: c.season, figmaUrl: url, custom: !CAMPAIGNS[k] });
+  }
+  return out;
+}
+
+export async function saveCampaign(input: Partial<CampaignSettings> & { key?: string }, by: string) {
+  const all = await campaignSettings();
+  const key = (input.key || input.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24);
+  if (!key) throw new Error("Name the campaign first");
+  const prev = all[key];
+  const base = CAMPAIGNS[key];
+  const next: CampaignSettings = {
+    key,
+    name: (input.name ?? prev?.name ?? base?.name ?? key).trim(),
+    root: (input.root ?? prev?.root ?? base?.root ?? "").trim().replace(/^\/+|\/+$/g, ""),
+    race: (input.race ?? prev?.race ?? base?.race ?? "").trim(),
+    season: (input.season ?? prev?.season ?? base?.season ?? "").trim(),
+    figmaUrl: prev?.figmaUrl,
+    figmaFile: prev?.figmaFile,
+    figmaPage: prev?.figmaPage,
+    updatedAt: new Date().toISOString(),
+    by,
+  };
+  if (!next.root) throw new Error("Add the page URL on staging (e.g. unlock-sao-paulo)");
+  if (input.figmaUrl !== undefined) {
+    const u = input.figmaUrl.trim();
+    if (u) {
+      const f = parseFigmaUrl(u);
+      if (!f) throw new Error("That is not a Figma file link");
+      next.figmaUrl = u;
+      next.figmaFile = f.fileKey;
+      next.figmaPage = f.nodeId ?? "";
+    } else {
+      next.figmaUrl = next.figmaFile = next.figmaPage = undefined;
+    }
+  }
+  // another campaign on the same board? one board per campaign
+  for (const c of await listCampaigns())
+    if (c.key !== key && next.figmaFile && c.figmaFile === next.figmaFile && (c.figmaPage || "") === (next.figmaPage || "")) throw new Error(`That Figma page already belongs to ${c.name}. Use another file or page.`);
+  all[key] = next;
+  await kvSet(kCampaigns, JSON.stringify(all));
+  return listCampaigns();
+}
+
+// groups for a campaign without a fixed sitemap, from its staging pages
+function autoGroups(c: Campaign, urls: string[]): Group[] {
+  const kids = urls.filter((u) => u !== c.root && u.split("/").length === c.root.split("/").length + 1).sort();
+  const groups: Group[] = [{ key: "hub", title: "Campaign Hub", urls: urls.includes(c.root) ? [c.root] : [], card: false, col: "center" }];
+  kids.forEach((u, i) => {
+    const deeper = urls.filter((x) => x.startsWith(u + "/")).sort();
+    const slug = u.split("/").pop()!;
+    groups.push({ key: slug, title: slug.replace(/-/g, " ").replace(/\b\w/g, (x) => x.toUpperCase()), urls: [u, ...deeper], card: true, col: i % 2 ? "right" : "left" });
+  });
+  return groups.filter((g) => g.urls.length);
+}
+
 // Mobile modules (375 px) per CMS block type. "local" modules are built by the
 // plugin as components in the working file (not in the 07 library).
 export type ModuleDef = { key?: string; variant?: string; variantByBg?: Record<string, string>; local?: string; name: string; desktop?: { key?: string; variant?: string; variantByBg?: Record<string, string>; local?: string } };
@@ -307,7 +421,8 @@ export async function loadModel(c: Campaign): Promise<Model> {
       }
   }
   // groups, one card per group (the badge most used on its pages)
-  const groups: (Group & { badgeId?: string })[] = c.groups.map((g) => {
+  const groupDefs = c.groups.length ? c.groups : autoGroups(c, docs.map((d) => str(d.url)));
+  const groups: (Group & { badgeId?: string })[] = groupDefs.map((g) => {
     if (!g.card) return { ...g };
     const count: Record<string, number> = {};
     for (const p of pages.filter((p) => g.urls.includes(p.url))) for (const b of p.blocks) if (b.badge) count[b.badge] = (count[b.badge] ?? 0) + 1;
@@ -445,7 +560,7 @@ export function compare(m: Model, base: FieldMap, figma: FieldMap | null): { dif
 }
 
 export async function status(campaign: string) {
-  const c = CAMPAIGNS[campaign];
+  const c = await getCampaign(campaign);
   if (!c) throw new Error("unknown campaign");
   const [m, snap, figma, pending, log] = await Promise.all([loadModel(c), getSnapshot(campaign), getFigmaReport(campaign), getPending(campaign), getLog(campaign)]);
   const cmp = compare(m, snap.base, figma?.values ?? null);
@@ -459,7 +574,7 @@ export async function status(campaign: string) {
 const splitPath = (p: string) => p.split(".").map((x) => (/^\d+$/.test(x) ? Number(x) : x));
 
 export async function applySync(campaign: string, by: string, opts: { figma?: FieldMap; nodes?: Record<string, string>; decisions?: Record<string, "figma" | "cms">; only?: string[] }) {
-  const c = CAMPAIGNS[campaign];
+  const c = await getCampaign(campaign);
   if (!c) throw new Error("unknown campaign");
   if (opts.figma) {
     const prev = await getFigmaReport(campaign);
@@ -553,7 +668,7 @@ function setPath(o: Json, p: (string | number)[], v: unknown) {
 }
 
 export async function previewSync(campaign: string, figma: FieldMap) {
-  const c = CAMPAIGNS[campaign];
+  const c = await getCampaign(campaign);
   if (!c) throw new Error("unknown campaign");
   const [m, snap] = await Promise.all([loadModel(c), getSnapshot(campaign)]);
   return { ...compare(m, snap.base, figma), syncedAt: snap.syncedAt };
@@ -589,7 +704,7 @@ export async function mediaFile(id: string): Promise<{ body: ArrayBuffer; type: 
 
 // An image placed in Figma → staging media (campaign folder + tag).
 export async function uploadFromFigma(campaign: string, name: string, bytes: Uint8Array, mime: string, alt: string) {
-  const c = CAMPAIGNS[campaign];
+  const c = await getCampaign(campaign);
   if (!c) throw new Error("unknown campaign");
   const [folders, tags] = await Promise.all([listMediaFolders().catch(() => []), listContentTags().catch(() => [])]);
   const folder = folders.find((f) => c.mediaFolder.test(f.name) || c.mediaFolder.test(f.path));
@@ -603,7 +718,7 @@ export async function uploadFromFigma(campaign: string, name: string, bytes: Uin
 
 // ---- Team Card list in the tool: one record per campaign card
 export async function cardsForConfigurator(campaign: string) {
-  const c = CAMPAIGNS[campaign];
+  const c = await getCampaign(campaign);
   if (!c) throw new Error("unknown campaign");
   const m = await loadModel(c);
   return m.cards.map((cd) => {
@@ -621,7 +736,7 @@ export async function cardsForConfigurator(campaign: string) {
     }
     const bd = m.badges[cd.badgeId];
     if (!engagementId) mechanic = "page";
-    return { badgeId: cd.badgeId, title: cd.title, rewardType: cd.rewardType, pageId, blockId, engagementId, mechanic, imageId: idOf(bd?.badgeImage), placement: `Singapore · ${g.title} (${g.urls.map((u) => "/" + u).join(", ")})` };
+    return { badgeId: cd.badgeId, title: cd.title, rewardType: cd.rewardType, pageId, blockId, engagementId, mechanic, imageId: idOf(bd?.badgeImage), placement: `${c.race || c.name} · ${g.title} (${g.urls.map((u) => "/" + u).join(", ")})` };
   });
 }
 

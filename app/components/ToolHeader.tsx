@@ -16,6 +16,7 @@ export const TOOLS: { href: string; key: string; name: string; status: "working"
   { href: "/assets", key: "/assets", name: "Asset Uploader", status: "working", text: "Compress, name, alt text, upload" },
   { href: "/photobook", key: "/photobook", name: "GP Mini-Zine", status: "staging", text: "GP zine to print, fold and colour in + fan page" },
   { href: "/teamcards", key: "/teamcards", name: "Team Card Configurator", status: "staging", text: "Cards, guided edit, journey preview, helper" },
+  { href: "/figma", key: "/figma", name: "Figma Sync", status: "working", text: "Figma ↔ staging CMS, plugin for every campaign board" },
   { href: "/images", key: "/images", name: "CRM Images", status: "planned", text: "Email template image variants" },
   { href: "https://af1-utm-studio.vercel.app/", key: "/utm", name: "UTM Studio", status: "external", external: true, text: "Campaign links (own app)" },
 ];

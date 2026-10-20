@@ -9,9 +9,23 @@ export type AccessUser = { email: string; tools: string[]; addedAt: string; adde
 
 const norm = (e: string) => e.trim().toLowerCase();
 
+// Tools released to everyone after the board was set up are added to every
+// listed person once; after that the board decides (remove it per person).
+const ADDED_LATER = ["/figma"];
+
 export async function listAccess(): Promise<AccessUser[]> {
   const raw = await kvGet(KEY).catch(() => null);
-  if (raw) return JSON.parse(raw) as AccessUser[];
+  if (raw) {
+    const list = JSON.parse(raw) as AccessUser[];
+    for (const t of ADDED_LATER) {
+      const flag = `access:added:${t}`;
+      if (await kvGet(flag).catch(() => "x")) continue;
+      list.forEach((u) => { if (!u.tools.includes(t)) u.tools.push(t); });
+      await kvSet(KEY, JSON.stringify(list)).catch(() => {});
+      await kvSet(flag, new Date().toISOString()).catch(() => {});
+    }
+    return list;
+  }
   const now = new Date().toISOString();
   const seeded = DEFAULT_TESTERS.map((email) => ({ email: norm(email), tools: defaultTesterTools(), addedAt: now, addedBy: "seed" }));
   await kvSet(KEY, JSON.stringify(seeded)).catch(() => {});

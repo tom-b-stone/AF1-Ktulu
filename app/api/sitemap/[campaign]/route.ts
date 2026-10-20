@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { applySync, cardsForConfigurator, status } from "@/lib/sitemapSync";
+import { applySync, cardsForConfigurator, getCampaign, status } from "@/lib/sitemapSync";
 import { importCampaignCards } from "@/lib/teamCards";
+import { isAdminEmail } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const b = (await req.json().catch(() => null)) as { action?: string; decisions?: Record<string, "figma" | "cms">; only?: string[] } | null;
   try {
     // { action: "import-cards" } → the campaign's Team Cards into the card list
-    if (b?.action === "import-cards") return NextResponse.json(await importCampaignCards(campaign.toUpperCase(), await cardsForConfigurator(campaign), "Singapore"));
+    if (b?.action === "import-cards" && !isAdminEmail(session.user.email)) return NextResponse.json({ error: "admins only" }, { status: 403 });
+    if (b?.action === "import-cards") return NextResponse.json(await importCampaignCards(campaign.toUpperCase(), await cardsForConfigurator(campaign), (await getCampaign(campaign))?.race || campaign));
     const r = await applySync(campaign, session.user.email, { decisions: b?.decisions ?? {}, only: Array.isArray(b?.only) ? b.only : undefined });
     return NextResponse.json(r);
   } catch (e) {
