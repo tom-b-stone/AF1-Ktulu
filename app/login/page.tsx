@@ -70,7 +70,7 @@ export default function LoginPage() {
       <style>{`
         .ktulu-gate { position: fixed; inset: 0; z-index: 2000; display: flex; flex-direction: column; overflow: hidden; background: #000; color: #f5f5f5; font-family: "DM Sans", "Archivo", system-ui, sans-serif; }
         .ktulu-gate .bg { position: absolute; inset: 0; pointer-events: none; }
-        .ktulu-gate .bg canvas { border-radius: 0 !important; opacity: .75; }
+        .ktulu-gate .bg canvas { border-radius: 0 !important; opacity: .75; width: 100% !important; height: 100% !important; }
         .ktulu-gate .shade { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(80% 75% at 25% 75%, rgba(0,0,0,.82), rgba(0,0,0,.35) 70%, rgba(0,0,0,.15)); }
         .ktulu-gate header, .ktulu-gate main, .ktulu-gate footer { position: relative; padding-left: 48px; padding-right: 48px; }
         .ktulu-gate header { display: flex; align-items: center; justify-content: space-between; padding-top: 26px; padding-bottom: 26px; }

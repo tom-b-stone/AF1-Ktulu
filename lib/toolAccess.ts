@@ -28,7 +28,7 @@ export const RELEASE: Record<string, { status: ReleaseStatus; paths: string[]; m
 };
 
 // The test group (Oct 2026). TESTER_EMAILS (comma-separated) replaces it on the server.
-export const DEFAULT_TESTERS = ["bpi@slash.digital", "hvb@slash.digital", "jko@slash.digital", "el@slash.digital"];
+export const DEFAULT_TESTERS = ["bpi@slash.digital", "hvb@slash.digital", "jko@slash.digital", "el@slash.digital", "ap@slash.digital"];
 
 export function canUseStatus(role: Role | undefined, status: ReleaseStatus): boolean {
   if (role === "admin") return true;
