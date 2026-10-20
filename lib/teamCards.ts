@@ -413,26 +413,54 @@ export async function setCardType(ids: string[], type: { id: string; title: stri
 }
 
 // ---- card image ------------------------------------------------------------------
-// A new card artwork (e.g. exported from the Figma Team Cards board) goes into
-// the staging media library; the card shows it at once, and a card that is on
+// A card artwork (exported from Figma or uploaded) goes through the Asset
+// Uploader rules: WebP, file name like the production card files
+// (AF1_Exclusive_Card_Monaco26_HUL_Nuvolari_Helmet.webp, the Figma layer name
+// when it follows that pattern), an alt text checked against the brand rules,
+// the year and Grand Prix content tags, folder "Team Cards". A card that is on
 // staging gets it as its badge image too.
-export async function setCardImage(id: string, file: Blob, filename: string, by: string, source = "upload") {
-  const { listMediaFolders, uploadMedia } = await import("./payloadClient");
+const pascal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, " ").trim().split(/\s+/).map((w) => w[0]?.toUpperCase() + w.slice(1)).join("");
+const under = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[’']/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+
+export function cardImageName(card: CardRecord, artName?: string, ext = "webp"): string {
+  if (artName && /^AF1_[A-Za-z]+_Card_/.test(artName)) return `${under(artName)}.${ext}`;
+  const type = pascal(String(card.brief?.badgeType ?? card.badgeTypeLabel ?? "Team")) || "Team";
+  const race = pascal(String(card.brief?.race ?? card.raceLabel ?? "Season"));
+  const yy = String(card.brief?.season ?? "2026").slice(-2);
+  const name = under(card.name.replace(new RegExp(String(card.brief?.race ?? "~~"), "i"), ""));
+  return `AF1_${type}_Card_${race}${yy}_${name}.${ext}`;
+}
+
+export function cardImageAlt(card: CardRecord): string {
+  const type = String(card.brief?.badgeType ?? card.badgeTypeLabel ?? "").trim();
+  const race = String(card.brief?.race ?? card.raceLabel ?? "").trim();
+  const long = `Team Card "${card.name}"${type ? `, ${type} card` : ""}${race ? `, ${race} Grand Prix 2026` : ""}, Audi Revolut F1® Team`;
+  return long.length <= 125 ? long : `Team Card "${card.name}"${type ? `, ${type} card` : ""}`.slice(0, 125);
+}
+
+export async function setCardImage(id: string, file: Blob, _filename: string, by: string, source = "upload", artName?: string) {
+  const { listMediaFolders, uploadMedia, listContentTags } = await import("./payloadClient");
+  const { gpTagFor } = await import("./contentTags");
   const cards = await listCards();
   const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
   if (!card) throw new Error("card not found");
-  const race = String(card.brief?.race ?? card.raceLabel ?? "");
+  const ext = /webp/.test(file.type) ? "webp" : /png/.test(file.type) ? "png" : "jpg";
+  const name = cardImageName(card, artName, ext);
+  const alt = cardImageAlt(card);
   const folders = await listMediaFolders().catch(() => []);
-  const want = race ? new RegExp(race.normalize("NFD").replace(/[̀-ͯ]/g, "").split(/\s+/)[0], "i") : null;
-  const folder = (want && folders.find((f) => want.test(f.name.normalize("NFD").replace(/[̀-ͯ]/g, "")))) || folders.find((f) => /team ?card|badge/i.test(f.name)) || null;
-  const media = await uploadMedia(file, filename, `Team Card: ${card.name}`, folder?.id ?? null);
+  const folder = folders.find((f) => f.name === "Team Cards") || folders.find((f) => /team ?card|badge/i.test(f.name)) || null;
+  const tags = await listContentTags().catch(() => []);
+  const titles = tags.map((t) => t.title);
+  const want = [titles.includes("2026") ? "2026" : undefined, gpTagFor({ race: String(card.brief?.race ?? card.raceLabel ?? "") }, titles)].filter(Boolean) as string[];
+  const tagIds = tags.filter((t) => want.includes(t.title)).map((t) => t.id);
+  const media = await uploadMedia(file, name, alt, folder?.id ?? null, tagIds);
   if (card.staging.badgeId) await stg(`/badges/${card.staging.badgeId}`, { method: "PATCH", body: JSON.stringify({ badgeImage: media.id }) });
   card.imageUrl = `/api/sitemap/media/${media.id}`;
   card.brief = { ...(card.brief ?? {}), imageId: media.id };
   card.updatedAt = new Date().toISOString();
-  card.log = [{ at: card.updatedAt, by, summary: `Card image from ${source}${card.staging.badgeId ? " (also on the staging card)" : ""}` }, ...card.log].slice(0, 50);
+  card.log = [{ at: card.updatedAt, by, summary: `Card image ${name} from ${source}${card.staging.badgeId ? " (also on the staging card)" : ""}` }, ...card.log].slice(0, 50);
   await saveCards(cards);
-  return { imageUrl: card.imageUrl, mediaId: media.id, folder: folder?.name ?? null };
+  return { imageUrl: card.imageUrl, mediaId: media.id, folder: folder?.name ?? null, fileName: name, alt, tags: want };
 }
 
 // ---- card artwork in Figma -------------------------------------------------------

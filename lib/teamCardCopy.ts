@@ -183,7 +183,7 @@ export async function remapMedia(v: Json, cache: Map<string, string>, steps: Cop
 }
 
 // ---- vocabulary ---------------------------------------------------------
-async function loyaltyTag(t: Json, steps: CopyStep[]): Promise<string | undefined> {
+export async function loyaltyTag(t: Json, steps: CopyStep[]): Promise<string | undefined> {
   if (!t) return undefined;
   const title = typeof t.title === "string" ? t.title : t.title?.en;
   const where = `where[title][equals]=${encodeURIComponent(title)}&where[type][equals]=${encodeURIComponent(t.type)}`;
@@ -194,7 +194,7 @@ async function loyaltyTag(t: Json, steps: CopyStep[]): Promise<string | undefine
   return doc.id;
 }
 
-async function badgeType(t: Json, steps: CopyStep[]): Promise<string | undefined> {
+export async function badgeType(t: Json, steps: CopyStep[]): Promise<string | undefined> {
   if (!t) return undefined;
   const title = typeof t.title === "string" ? t.title : t.title?.en;
   if (!title) return undefined;

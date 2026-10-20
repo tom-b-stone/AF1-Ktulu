@@ -82,7 +82,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         if (!x.data || !x.card) return json({ error: "card and image required" }, 400);
         const bytes = Buffer.from(x.data, "base64");
         if (bytes.byteLength > 4_000_000) return json({ error: "image over 4 MB" }, 400);
-        const r = await setCardImage(x.card, new Blob([bytes], { type: "image/jpeg" }), x.name || `${x.card}.jpg`, rec.email, "the Figma Team Cards board (plugin)");
+        const mime = (x as { mime?: string }).mime || "image/jpeg";
+        const r = await setCardImage(x.card, new Blob([bytes], { type: mime }), x.name || `${x.card}.jpg`, rec.email, "the Figma Team Cards board (plugin)", (x as { art?: string }).art);
         if (x.hash) await setCardArtHash(x.card, x.hash);
         console.log(`[figma] ${rec.email} card image ${x.card} from Figma`);
         return json(r);

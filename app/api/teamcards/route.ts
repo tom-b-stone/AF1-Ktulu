@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
+import { listCampaigns } from "@/lib/sitemapSync";
 import { applyChanges, badgeTypes, cardCheck, cardMeta, diff, listCards, setCardType, stagingLinks, type Change } from "@/lib/teamCards";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,10 @@ export async function GET() {
   try {
     const cards = await listCards();
     const meta = await cardMeta(cards).catch(() => ({}) as Awaited<ReturnType<typeof cardMeta>>);
-    return NextResponse.json({ cards: cards.map((c) => ({ ...c, links: stagingLinks(c), meta: meta[c.staging.badgeId] ?? { core: false, type: c.brief?.badgeType || undefined, campaign: c.brief?.campaign || undefined, race: c.brief?.race, partner: c.brief?.partner }, check: cardCheck(c, meta[c.staging.badgeId]) })) });
+    // a card without a campaign tag belongs to the campaign of its Grand Prix (e.g. São Paulo → Unlock São Paulo)
+    const camps = await listCampaigns().catch(() => []);
+    const campOf = (race?: string) => (race ? camps.find((x) => x.race && x.race.toLowerCase() === race.toLowerCase())?.name : undefined);
+    return NextResponse.json({ cards: cards.map((c) => ({ ...c, links: stagingLinks(c), meta: meta[c.staging.badgeId] ?? { core: false, type: c.brief?.badgeType || undefined, campaign: c.brief?.campaign || campOf(c.brief?.race) || undefined, race: c.brief?.race, partner: c.brief?.partner }, check: cardCheck(c, meta[c.staging.badgeId]) })) });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "failed" }, { status: 502 });
   }

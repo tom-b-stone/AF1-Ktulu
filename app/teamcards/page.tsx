@@ -364,6 +364,22 @@ function BulkBar({ ids, cards, onClear, onDone }: { ids: string[]; cards: Row[];
       },
     });
   };
+  const perCard = (label: string, path: string, only: (c: Row) => boolean) => {
+    const list = ids.filter((id) => { const c = cards.find((x) => x.id === id); return c && only(c); });
+    setAsk({
+      label: list.length ? `${label}: ${list.length} card${list.length === 1 ? "" : "s"}?` : `${label}: none of the selected cards qualify.`,
+      run: async () => {
+        let ok = 0;
+        const errs: string[] = [];
+        for (const id of list) {
+          const j = await fetch(`/api/teamcards/${id}/${path}`, { method: "POST" }).then((r) => r.json()).catch(() => ({ ok: false }));
+          if (j.ok) ok++;
+          else errs.push(`${id}: ${(j.steps ?? []).filter((x: { ok: boolean }) => !x.ok).map((x: { step: string; detail?: string }) => x.detail || x.step).join(", ") || "failed"}`);
+        }
+        return { text: `${label}: ${ok} of ${list.length} done.${errs.length ? " " + errs.join(" · ") : ""}`, err: errs.length > 0 };
+      },
+    });
+  };
   async function go() {
     if (!ask) return;
     setBusy(true);
@@ -380,6 +396,9 @@ function BulkBar({ ids, cards, onClear, onDone }: { ids: string[]; cards: Row[];
         <>
           <button className="btn" onClick={() => setDisabled(true)}>Disable</button>
           <button className="btn" onClick={() => setDisabled(false)}>Enable</button>
+          <span style={{ width: 1, height: 22, background: "var(--border)" }} />
+          <button className="btn" onClick={() => perCard("Build on staging (disabled)", "create", (c) => !c.links.badge)}>Build on staging</button>
+          <button className="btn" onClick={() => perCard("Get from production, overwrites staging", "from-prod", () => true)}>Get from production</button>
           <span style={{ width: 1, height: 22, background: "var(--border)" }} />
           <select className="input" style={{ width: "auto", padding: "5px 8px" }} value={type} onChange={(e) => setType(e.target.value)} aria-label="Card type">
             <option value="">{types ? "Card type …" : "Loading types …"}</option>

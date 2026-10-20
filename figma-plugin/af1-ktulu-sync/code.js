@@ -328,7 +328,8 @@ async function loadCampaigns() {
   var onBoard = fk ? state.campaigns.filter(function (c) { return c.figmaFile === fk; }) : [];
   var pick = null;
   if (onBoard.length === 1) pick = onBoard[0].key;
-  else if (onBoard.length > 1) pick = (onBoard.filter(function (c) { return c.key === saved; })[0] || onBoard.filter(function (c) { return c.figmaPage === figma.currentPage.id; })[0] || onBoard[0]).key;
+  // several campaigns in one file (one page each): the page you are on decides
+  else if (onBoard.length > 1) pick = (onBoard.filter(function (c) { return c.figmaPage === figma.currentPage.id; })[0] || onBoard.filter(function (c) { return c.key === saved; })[0] || onBoard[0]).key;
   else if (saved && campaignOf(saved)) pick = saved;
   else if (state.campaigns.length === 1) pick = state.campaigns[0].key;
   state.campaign = pick || "";
@@ -627,12 +628,17 @@ async function buildSection(p, num, card, group, isMain, mainUrl, ov) {
 
 function overviewSection(page) { return page.findOne(function (n) { return n.type === "SECTION" && /Flow_Overview$/.test(n.name); }); }
 
-// the overview on top, every section under it (like the São Paulo file)
+// the built sections stacked in one column. A page that also holds the
+// designers' own work keeps it where it is: the column goes to the right of it.
 function arrange(page, secs) {
-  var ov = overviewSection(page), GAP = 1200;
-  if (ov) { ov.x = 0; ov.y = 0; }
-  var y = ov ? ov.height + GAP : 0;
-  secs.forEach(function (s) { s.x = 0; s.y = y; y += s.height + GAP; });
+  var ov = overviewSection(page), GAP = 1200, mine = secs.slice();
+  var others = page.children.filter(function (n) { return mine.indexOf(n) < 0 && n.name !== "AF1 Contents"; });
+  var x0 = 0, y = 0;
+  if (others.length) {
+    x0 = Math.max.apply(null, others.map(function (n) { return n.x + n.width; })) + 4000;
+    y = Math.min.apply(null, others.map(function (n) { return n.y; }));
+  }
+  secs.forEach(function (s) { s.x = x0; s.y = y; y += s.height + GAP; });
 }
 
 // a contents list right of the overview: one link per section
@@ -647,7 +653,7 @@ async function contents(page, secs, ov) {
     var t = figma.createText(); f.appendChild(t); t.fontName = { family: "Inter", style: "Regular" }; t.fontSize = 26;
     t.characters = s.name.replace(/^[A-Z0-9-]+ · /, ""); t.fills = ON_DARK; t.textDecoration = "UNDERLINE"; t.hyperlink = { type: "NODE", value: s.id };
   });
-  f.x = ov ? ov.x + ov.width + 300 : -1200; f.y = 0;
+  if (secs.length) { f.x = secs[0].x - f.width - 800; f.y = secs[0].y; } else { f.x = ov ? ov.x + ov.width + 300 : -1200; f.y = 0; }
   return f;
 }
 
@@ -674,8 +680,8 @@ async function linkOverview(page, secByUrl) {
 async function buildAll() {
   state.data = await api("GET");
   var page = await goToCampaignPage();
-  // a full rebuild: remove every screen section (the overview stays)
-  page.children.filter(function (n) { return n.type === "SECTION" && !/Flow_Overview$/.test(n.name); }).forEach(function (n) { n.remove(); });
+  // a full rebuild: remove only the sections this plugin built; designers' own sections stay
+  page.children.filter(function (n) { if (n.type !== "SECTION") return false; var d = readData(n); return !!(d && d.type === "section"); }).forEach(function (n) { n.remove(); });
   var ov = overviewSection(page);
   var d = state.data, num = 0, secs = [], secByUrl = {}, built = 0;
   // sitemap order: hub column first, then the activations (activation page, then its QR page)
@@ -745,9 +751,10 @@ async function artSync(report) {
       var h = fnv(thumb);
       if (h === x.card.hash && x.card.hasImage) { same++; continue; }
       progress("Card image " + x.card.name + " → AF1 Tool …");
-      var jpg = await x.node.exportAsync({ format: "JPG", constraint: { type: "WIDTH", value: 1080 } });
-      var slug = deacc(x.card.name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      await artApi("POST", { action: "card-image", card: x.card.id, data: figma.base64Encode(jpg), hash: h, name: "audif1_team-card_" + slug + ".jpg" });
+      // Asset Uploader rules: WebP from the UI (the sandbox can't encode it), named after the Figma layer
+      var png = await x.node.exportAsync({ format: "PNG", constraint: { type: "WIDTH", value: 1080 } });
+      var enc = await askUI("encode-image", { bytes: Array.from(png), webp: true });
+      await artApi("POST", { action: "card-image", card: x.card.id, data: enc.base64, mime: enc.mime, hash: h, art: x.node.name });
       x.card.hash = h; x.card.hasImage = true;
       done.push(x.card.name);
     }

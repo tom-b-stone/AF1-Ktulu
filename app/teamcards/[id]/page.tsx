@@ -111,6 +111,20 @@ export default function EditCard() {
   const [result, setResult] = useState<{ pushed: string[]; errors: string[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [imgErr, setImgErr] = useState<string | null>(null);
+  const [jumpHint, setJumpHint] = useState<string | null>(null);
+  const [prod, setProd] = useState<{ id: string; title: string } | null>(null);
+  const [ask2, setAsk2] = useState<{ title: string; body: string; ok: string; run: () => Promise<string> } | null>(null);
+  const [askBusy, setAskBusy] = useState(false);
+  const [actMsg, setActMsg] = useState<{ text: string; err?: boolean } | null>(null);
+  useEffect(() => {
+    fetch(`/api/teamcards/${id}/from-prod`).then((r) => r.json()).then((j) => setProd(j.prod ?? null)).catch(() => {});
+  }, [id]);
+  const stepsText = (j: { ok?: boolean; steps?: { step: string; ok: boolean; detail?: string }[] }) => (j.steps ?? []).filter((x) => !x.ok || /created|updated|placed|stopped/.test(x.step)).map((x) => (x.ok ? "✓ " : "✗ ") + x.step + (x.detail ? `: ${x.detail}` : "")).join("\n");
+  useEffect(() => {
+    if (!jumpHint) return;
+    const t = setTimeout(() => setJumpHint(null), 6000);
+    return () => clearTimeout(t);
+  }, [jumpHint]);
 
   // ---- load ---------------------------------------------------------------
   useEffect(() => {
@@ -330,6 +344,7 @@ export default function EditCard() {
     if (st) setStation(st.id);
     setFocus(k);
     if (st) setDrawer(true);
+    setJumpHint(`${labelOf(k)} is open in the editor on the right${st ? ` and marked on “${st.label}”` : ""}. Change it there, then go back to Review.`);
   };
 
   // ---- render -------------------------------------------------------------
@@ -554,8 +569,10 @@ export default function EditCard() {
                     const f = e.target.files?.[0];
                     if (!f) return;
                     setBusy("image");
+                    const { compressImage } = await import("@/lib/imageCompress");
+                    const c = await compressImage(f, 1600, 0.85).catch(() => null);
                     const fd = new FormData();
-                    fd.append("file", f);
+                    fd.append("file", c ? new File([c.blob], f.name.replace(/\.[a-z0-9]+$/i, c.mime === "image/webp" ? ".webp" : ".jpg"), { type: c.mime }) : f);
                     const j = await fetch(`/api/teamcards/${card.id}/image`, { method: "POST", body: fd }).then((r) => r.json()).catch(() => ({ error: "upload failed" }));
                     setBusy(null);
                     if (j.error) return setImgErr(j.error);
@@ -621,6 +638,21 @@ export default function EditCard() {
                 </button>
                 <span style={{ fontSize: 12.5, color: C.mute }}>{next.why}</span>
               </div>
+              {(!card.links.badge || prod) && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
+                  {prod && (
+                    <button style={btn(!card.links.badge)} onClick={() => setAsk2({ title: "Get this card from production?", body: `“${prod.title}” is live on production. Its texts, images, engagement and module are copied to staging. Whatever is on staging for this card now is overwritten.`, ok: "Yes, copy from production", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/from-prod`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Copied from production. Reload to see the staging content.\n" : "Not finished.\n") + stepsText(j); } })}>
+                      Get from production
+                    </button>
+                  )}
+                  {!card.links.badge && (
+                    <button style={btn(!prod)} onClick={() => setAsk2({ title: "Build this card on staging?", body: "It is created as a disabled card with its texts in EN and DE, the card image, card type, Grand Prix and campaign. Links go to the campaign hub. Engagement and module on a page come next.", ok: "Yes, build it", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/create`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Built on staging (disabled). Reload to see the links.\n" : "Not built.\n") + stepsText(j); } })}>
+                      Build on staging
+                    </button>
+                  )}
+                  {actMsg && <span style={{ fontSize: 12.5, whiteSpace: "pre-wrap", color: actMsg.err ? "#e06c5b" : C.ok, flexBasis: "100%" }}>{actMsg.text}</span>}
+                </div>
+              )}
             </section>
 
             <section aria-label="Journey" style={{ borderRadius: 18, border: `1px solid ${C.line}`, padding: "16px 20px", display: "grid", gap: 10 }}>
@@ -731,6 +763,10 @@ export default function EditCard() {
               others={others as Peer[]}
               where={whereUsed}
               onGo={goTo}
+              onTake={(k, v) => {
+                setText(k, "en", v.en);
+                if (v.de) setText(k, "de", v.de);
+              }}
               lex={lex}
               cross={cross}
               onUseLex={(k, e) => {
@@ -757,6 +793,28 @@ export default function EditCard() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {ask2 && (
+        <div role="dialog" aria-modal="true" aria-label={ask2.title} onClick={(e) => e.target === e.currentTarget && !askBusy && setAsk2(null)} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", padding: 16 }}>
+          <div style={{ width: "min(460px, 100%)", borderRadius: 16, background: C.panel, border: `1px solid ${C.line2}`, padding: 22, display: "grid", gap: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 650 }}>{ask2.title}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.55, color: "#cfcdcc" }}>{ask2.body}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button disabled={askBusy} style={{ ...btn(true), fontWeight: 600, height: 36 }} onClick={async () => { setAskBusy(true); const t = await ask2.run().catch((e) => `✗ ${e instanceof Error ? e.message : "failed"}`); setAskBusy(false); setAsk2(null); setActMsg({ text: t, err: /^Not|✗/.test(t) }); }}>
+                {askBusy ? "Working …" : ask2.ok}
+              </button>
+              <button disabled={askBusy} style={{ ...btn(), height: 36 }} onClick={() => setAsk2(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {jumpHint && (
+        <div role="status" onClick={() => setJumpHint(null)} style={{ position: "fixed", top: 150, right: drawer ? 480 : 54, zIndex: 60, maxWidth: 300, padding: "10px 12px", borderRadius: 10, background: "#fff", color: "#141417", fontSize: 12.5, lineHeight: 1.45, boxShadow: "0 18px 40px -18px rgba(0,0,0,.8)", cursor: "pointer" }}>
+          {jumpHint}
+          <span style={{ position: "absolute", right: -6, top: 18, width: 12, height: 12, background: "#fff", transform: "rotate(45deg)" }} />
         </div>
       )}
 
@@ -968,9 +1026,9 @@ const MECH_LABEL: Record<string, string> = { "q-and-a": "Q&A", survey: "Survey",
 const campaignOfPeer = (c: { meta?: { campaign?: string } }) => c.meta?.campaign || ""; // a Grand Prix is not a campaign
 
 function Consistency({
-  keys, mine, me, others, lex, cross, onUseLex, onSync, where, onGo,
+  keys, mine, me, others, lex, cross, onUseLex, onSync, where, onGo, onTake,
 }: {
-  keys: string[]; mine: (k: string) => LV; where: (k: string) => string[]; onGo: (k: string) => void; me: { mechanic?: string; campaign?: string; type?: string }; others: Peer[]; lex: LexEntry[]; cross: Cross;
+  keys: string[]; mine: (k: string) => LV; where: (k: string) => string[]; onGo: (k: string) => void; onTake: (k: string, v: LV) => void; me: { mechanic?: string; campaign?: string; type?: string }; others: Peer[]; lex: LexEntry[]; cross: Cross;
   onUseLex: (k: string, e: LexEntry) => void; onSync: (k: string, ids: string[]) => void;
 }) {
   // each other card in the first scope it shares with this one
@@ -1014,6 +1072,30 @@ function Consistency({
     .filter((b) => b.my.en.trim() && (b.rows.length || b.lx.length))
     .sort((a, b) => Number(b.open) - Number(a.open));
 
+  // one suggestion per wording question: the more common wording wins; you only say Apply or Discard
+  const [gone, setGone] = useState<Record<string, boolean>>({});
+  type Sug = { id: string; k: string; why: string; whereNow?: string; now: LV; next: LV; apply: () => void };
+  const suggestions: Sug[] = [];
+  for (const bl of blocks) {
+    for (const row of bl.rows) {
+      for (const g of row.differ) {
+        const theirs = { en: g.en, de: g.de };
+        const ids = g.cards.map((c) => c.id);
+        const done = ids.every((id) => (cross[id] ?? []).some((x) => x.key === bl.k));
+        if (done) continue;
+        const scope = row.sc.title.split(" · ")[0].toLowerCase();
+        if (g.cards.length > row.same + 1) {
+          // most related cards say it differently: change this card
+          suggestions.push({ id: `${bl.k}|${row.sc.key}|${g.en}|here`, k: bl.k, why: `${g.cards.length} cards of ${scope} say it differently`, whereNow: "this card", now: bl.my, next: { en: theirs.en, de: theirs.de || bl.my.de }, apply: () => onTake(bl.k, { en: theirs.en, de: theirs.de || bl.my.de }) });
+        } else {
+          suggestions.push({ id: `${bl.k}|${row.sc.key}|${g.en}|there`, k: bl.k, why: `same text on ${g.cards.length} card${g.cards.length === 1 ? "" : "s"} of ${scope}: ${g.cards.slice(0, 3).map((c) => c.name).join(", ")}${g.cards.length > 3 ? " …" : ""}`, whereNow: `${g.cards.length} other card${g.cards.length === 1 ? "" : "s"}`, now: theirs, next: bl.my, apply: () => onSync(bl.k, ids) });
+        }
+      }
+    }
+    for (const e of bl.lx.filter((e) => e.saved).slice(0, 1))
+      suggestions.push({ id: `${bl.k}|lex|${e.id}`, k: bl.k, why: "approved wording in the lexicon", whereNow: "this card", now: bl.my, next: { en: e.en, de: e.de || bl.my.de }, apply: () => onUseLex(bl.k, e) });
+  }
+
   const cell: CSSProperties = { padding: "7px 10px", fontSize: 12.5, borderTop: `1px solid ${C.line}`, verticalAlign: "top" };
   return (
     <div style={{ display: "grid", gap: 12, marginTop: 6 }}>
@@ -1045,55 +1127,33 @@ function Consistency({
         </section>
       )}
 
-      {blocks.map((b) => (
-        <div key={b.k} style={{ border: `1px solid ${b.open ? "rgba(227,62,26,.35)" : C.line}`, borderRadius: 12, padding: 12, display: "grid", gap: 8, background: "#141417" }}>
-          <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, minWidth: 0 }}>
-              {labelOf(b.k)}
-              <span style={{ color: C.mute, fontWeight: 400 }}> · this card: “{b.my.en}”{b.my.de ? ` / “${b.my.de}”` : ""}</span>
-              <div style={{ fontSize: 11.5, color: C.mute, fontWeight: 400, marginTop: 2 }}>Shown on: {where(b.k).join(" · ") || "not on a screen of this journey"}</div>
+      {suggestions.filter((x) => !gone[x.id]).map((x) => (
+        <div key={x.id} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, display: "grid", gap: 10, background: "#141417" }}>
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              {labelOf(x.k)} <span style={{ color: C.mute, fontWeight: 400 }}>· {x.why}</span>
             </div>
-            <button style={{ ...btn(), height: 28, fontSize: 12, flexShrink: 0 }} onClick={() => onGo(b.k)}>Edit on this card</button>
+            <button onClick={() => onGo(x.k)} style={{ all: "unset", cursor: "pointer", fontSize: 12, color: C.mute, textDecoration: "underline", textUnderlineOffset: 3 }} title="Opens the screen with this text and the editor">
+              Show on {where(x.k)[0] ?? "the card"}
+            </button>
           </div>
-          {b.rows.map(({ sc, same, differ }) => (
-            <div key={sc.key} style={{ display: "grid", gap: 6, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
-              <div style={{ display: "flex", gap: 10, justifyContent: "space-between", fontSize: 11.5 }}>
-                <span style={{ color: C.mute, textTransform: "uppercase", letterSpacing: ".08em" }}>{sc.title}</span>
-                {same > 0 && <span style={{ color: C.ok }}>same on {same} card{same === 1 ? "" : "s"}</span>}
-              </div>
-              {differ.map((g) => {
-                const ids = g.cards.map((c) => c.id);
-                const done = ids.every((id) => (cross[id] ?? []).some((x) => x.key === b.k));
-                return (
-                  <div key={g.en + g.de} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", fontSize: 12.5 }}>
-                    <span style={{ minWidth: 0 }}>
-                      “{g.en}”{g.de ? <span style={{ color: C.mute }}> / “{g.de}”</span> : <span style={{ color: "#e06c5b" }}> / DE missing</span>}
-                      <span style={{ display: "block", fontSize: 11, color: C.mute }}>
-                        {g.cards.slice(0, 5).map((c) => c.name).join(", ")}
-                        {g.cards.length > 5 ? ` +${g.cards.length - 5}` : ""}
-                      </span>
-                    </span>
-                    <button style={{ ...btn(done), flexShrink: 0 }} disabled={done} onClick={() => onSync(b.k, ids)}>
-                      {done ? "Will be synced" : `Use this card's wording on ${ids.length}`}
-                    </button>
-                  </div>
-                );
-              })}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10 }}>
+            <div style={{ borderRadius: 10, border: `1px solid ${C.line}`, padding: "8px 10px" }}>
+              <div style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: C.mute }}>Now{x.whereNow ? ` · ${x.whereNow}` : ""}</div>
+              <div style={{ fontSize: 13.5, marginTop: 4 }}>“{x.now.en}”{x.now.de ? <span style={{ color: C.mute }}> / “{x.now.de}”</span> : <span style={{ color: "#e06c5b" }}> / DE missing</span>}</div>
             </div>
-          ))}
-          {b.lx.length > 0 && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
-              <span style={{ fontSize: 11, color: C.mute, alignSelf: "center" }}>Lexicon:</span>
-              {b.lx.map((e) => (
-                <button key={e.id} onClick={() => onUseLex(b.k, e)} style={{ ...btn(), height: 28, fontSize: 12 }} title="Use this wording on this card">
-                  <span style={{ color: e.saved ? C.ok : C.mute, fontSize: 10.5 }}>{e.saved ? "approved" : `used ${e.uses}×`}</span> {e.en}
-                  {e.de ? <span style={{ color: C.mute }}> / {e.de}</span> : null}
-                </button>
-              ))}
+            <div style={{ borderRadius: 10, border: "1px solid rgba(111,207,124,.45)", background: "rgba(111,207,124,.06)", padding: "8px 10px" }}>
+              <div style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: C.ok }}>Suggested</div>
+              <div style={{ fontSize: 13.5, marginTop: 4 }}>“{x.next.en}”{x.next.de ? <span style={{ color: C.mute }}> / “{x.next.de}”</span> : null}</div>
             </div>
-          )}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => { x.apply(); setGone((g) => ({ ...g, [x.id]: true })); }}>Apply</button>
+            <button style={btn()} onClick={() => setGone((g) => ({ ...g, [x.id]: true }))}>Discard</button>
+          </div>
         </div>
       ))}
+      {suggestions.length > 0 && suggestions.every((x) => gone[x.id]) && <div style={{ fontSize: 12.5, color: C.ok }}>All suggestions handled. Applied ones are in the list above and go to staging with “Apply to staging”.</div>}
       {!blocks.length && <div style={{ fontSize: 12.5, color: C.ok }}>Buttons and recurring texts match the related cards.</div>}
     </div>
   );
