@@ -32,10 +32,12 @@ type Row = {
 
 const MECH: Record<string, string> = { "q-and-a": "Q&A", survey: "Survey", "hot-or-not": "Hot or Not", page: "Page visit", link: "Link" };
 const REWARD: Record<string, string> = { noReward: "No reward", raffleSignup: "Raffle", couponCode: "Voucher" };
-const PREFIX: Record<string, string> = { SIN: "Unlock Singapore" };
+const PREFIX: Record<string, string> = { SIN: "Singapore" };
 
-// a campaign (e.g. Unlock Singapore) is its own thing; the Grand Prix of a card is not its campaign
+// a campaign (e.g. Singapore) is its own thing; the Grand Prix of a card is not its campaign
 const campaignOf = (c: Row) => c.meta.campaign || PREFIX[c.id.split("-")[0]] || "No campaign";
+// when a card came into Ktulu: the import date, else its oldest log entry
+const addedAt = (c: Row) => Date.parse(String((c as unknown as { brief?: { importedAt?: string } }).brief?.importedAt ?? c.log[c.log.length - 1]?.at ?? c.updatedAt)) || 0;
 const gpOf = (c: Row) => c.meta.race || c.raceLabel || "No Grand Prix";
 const typeOf = (c: Row) => c.meta.type || (c.meta.core ? "Core" : "Unknown type");
 const QUICK_TONE: Record<Row["check"]["quick"], { bg: string; fg: string; label: string }> = {
@@ -125,7 +127,7 @@ export default function Page() {
       if (!needle) return true;
       const hay = [c.name, c.id, campaignOf(c), typeOf(c), c.meta.partner, c.meta.race, MECH[c.mechanic ?? ""], REWARD[c.rewardType ?? ""], ...c.check.missing].join(" ").toLowerCase();
       return hay.includes(needle);
-    });
+    }).sort((a, b) => addedAt(b) - addedAt(a)); // newest cards first
   }, [cards, q, fCampaign, fGp, fType, fQuick]);
 
   const summary = useMemo(() => {
@@ -303,7 +305,6 @@ export default function Page() {
               getRowId={(r) => r.id}
               resizable
               reorderable
-              defaultSort={{ key: "check", direction: "asc" }}
               height={Math.max(360, Math.min(760, 120 + shown.length * 64))}
               rowHeight={60}
               emptyState={filtered ? "No card matches these filters." : "No cards yet."}

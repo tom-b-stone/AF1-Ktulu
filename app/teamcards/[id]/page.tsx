@@ -706,7 +706,7 @@ export default function EditCard() {
 
       {/* ---- review ---- */}
       {step === "review" && (
-        <div style={{ padding: "22px 24px", maxWidth: 1000, display: "grid", gap: 14 }}>
+        <div style={{ padding: "22px 24px", maxWidth: 1480, display: "grid", gap: 14 }}>
           {busy && <div style={{ color: C.mute }}>{busy}</div>}
           {review && review.rows.length === 0 && !Object.keys(cross).length && !result && <div style={{ color: C.mute }}>Nothing changed yet. Pick a step and tap a text on a screen.</div>}
           {review && (review.rows.length > 0 || Object.keys(cross).length > 0) && (
@@ -1098,7 +1098,8 @@ function Consistency({
 
   const cell: CSSProperties = { padding: "7px 10px", fontSize: 12.5, borderTop: `1px solid ${C.line}`, verticalAlign: "top" };
   return (
-    <div style={{ display: "grid", gap: 12, marginTop: 6 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start", marginTop: 6 }}>
+      <div style={{ flex: "0 1 320px", minWidth: 260, display: "grid", gap: 12, position: "sticky", top: 120 }}>
       <div>
         <div style={{ fontSize: 15, fontWeight: 650 }}>Same wording where it does the same thing?</div>
         <div style={{ fontSize: 12.5, color: C.mute }}>
@@ -1108,27 +1109,22 @@ function Consistency({
 
       {mineButtons.length > 0 && (
         <section aria-label="Buttons in this card" style={{ border: `1px solid ${C.line}`, borderRadius: 12, background: "#141417", overflow: "hidden" }}>
-          <div style={{ padding: "10px 12px 6px", fontSize: 13, fontWeight: 600 }}>Buttons in this card</div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <tbody>
-              {mineButtons.map((b) => (
-                <tr key={b.k}>
-                  <td style={{ ...cell, color: C.mute, width: 190 }}>
-                    <button onClick={() => onGo(b.k)} style={{ all: "unset", cursor: "pointer", color: C.fg, textDecoration: "underline", textUnderlineOffset: 3 }}>{b.f?.label ?? b.k}</button>
-                    <div style={{ fontSize: 11 }}>{where(b.k).join(" · ") || b.f?.step}</div>
-                  </td>
-                  <td style={cell}>{b.v.en || <span style={{ color: "#e06c5b" }}>EN missing</span>}</td>
-                  <td style={cell}>{b.v.de || <span style={{ color: "#e06c5b" }}>DE missing</span>}</td>
-                  <td style={{ ...cell, color: dupe(b.k, b.v.en) ? "#ffb5a6" : C.mute, width: 200 }}>{dupe(b.k, b.v.en) ? "Same label as another button: does it do the same?" : ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={{ padding: "10px 12px 4px", fontSize: 13, fontWeight: 600 }}>Buttons in this card</div>
+          {mineButtons.map((b) => (
+            <div key={b.k} style={{ ...cell, display: "grid", gap: 2 }}>
+              <button onClick={() => onGo(b.k)} style={{ all: "unset", cursor: "pointer", fontSize: 11.5, color: C.mute, textDecoration: "underline", textUnderlineOffset: 3 }}>{b.f?.label ?? b.k} · {where(b.k)[0] || b.f?.step}</button>
+              <span>{b.v.en || <span style={{ color: "#e06c5b" }}>EN missing</span>} <span style={{ color: C.mute }}>/ {b.v.de || <span style={{ color: "#e06c5b" }}>DE missing</span>}</span></span>
+              {dupe(b.k, b.v.en) && <span style={{ fontSize: 11.5, color: "#ffb5a6" }}>Same label as another button: does it do the same?</span>}
+            </div>
+          ))}
         </section>
       )}
+      </div>
+
+      <div style={{ flex: "1 1 560px", minWidth: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 12, alignItems: "start" }}>
 
       {suggestions.filter((x) => !gone[x.id]).map((x) => (
-        <div key={x.id} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, display: "grid", gap: 10, background: "#141417" }}>
+        <div key={x.id} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, display: "grid", gap: 8, background: "#141417" }}>
           <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap" }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>
               {labelOf(x.k)} <span style={{ color: C.mute, fontWeight: 400 }}>· {x.why}</span>
@@ -1154,6 +1150,7 @@ function Consistency({
         </div>
       ))}
       {suggestions.length > 0 && suggestions.every((x) => gone[x.id]) && <div style={{ fontSize: 12.5, color: C.ok }}>All suggestions handled. Applied ones are in the list above and go to staging with “Apply to staging”.</div>}
+      </div>
       {!blocks.length && <div style={{ fontSize: 12.5, color: C.ok }}>Buttons and recurring texts match the related cards.</div>}
     </div>
   );
