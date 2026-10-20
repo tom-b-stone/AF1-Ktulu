@@ -21,27 +21,77 @@
   .head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
   .warn { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--lava); margin: 10px 0; }
   .warn a { color: var(--lava); }
+  .tabs { display: flex; gap: 4px; margin: 10px 0 4px; border-bottom: 1px solid var(--line); }
+  .tab { border-radius: 8px 8px 0 0; background: transparent; padding: 8px 14px; color: var(--muted); }
+  .tab.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--lava); }
+  .step { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+  .step > summary { list-style: none; display: flex; gap: 10px; align-items: center; padding: 10px 12px; color: var(--ink); font-weight: 600; }
+  .step > summary::-webkit-details-marker { display: none; }
+  .num { width: 20px; height: 20px; border-radius: 99px; display: grid; place-items: center; font-size: 11px; background: var(--bg2); flex-shrink: 0; }
+  .num.ok { background: #2e7d4f; color: #fff; }
+  .step .body { padding: 0 12px 12px 42px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+  .link { color: var(--ink); text-decoration: underline; cursor: pointer; }
+  .cand { display: grid; grid-template-columns: 18px 1fr; gap: 6px 8px; border-top: 1px solid var(--line); padding: 8px 0; }
+  .cand select { width: 100%; margin-top: 4px; }
+  #artList { max-height: 260px; overflow: auto; }
 </style>
 <div class="head"><h1>AF1 Ktulu Sync</h1><select id="campaign" hidden title="Campaign of this board"></select></div>
 <p id="sub">Figma, the AF1 Tool and staging stay in the same state.</p>
-
-<div id="tokenBox" hidden>
-  <p>Paste your plugin token (af1-ktulu.vercel.app/teamcards/figma → "Create plugin token").</p>
-  <div class="row"><input type="text" id="token" placeholder="token" /><button class="primary" id="saveToken">Connect</button></div>
+<div class="tabs" role="tablist">
+  <button class="tab on" id="tSync" role="tab">Sync</button>
+  <button class="tab" id="tSetup" role="tab">Setup</button>
 </div>
 
-<div id="main" hidden>
-  <div class="status" id="status">…</div>
-  <div id="stale"></div>
-  <div id="progress"></div>
-  <div id="buildBox"></div>
-  <div id="changes"></div>
-  <details>
-    <summary>Settings</summary>
-    <div class="row"><label><input type="checkbox" id="live"> Live sync every 20 s while this window is open</label></div>
-    <div class="row"><button id="rebuild">Rebuild all screens</button><button id="changeToken">Change token</button></div>
+<!-- SYNC: what is going on right now -->
+<section id="pSync">
+  <p id="noToken" hidden>Not connected yet. Open <span class="link" id="goSetup">Setup</span> to start, it takes a minute.</p>
+  <div id="main" hidden>
+    <div class="status" id="status">…</div>
+    <div id="stale"></div>
+    <div id="progress"></div>
+    <div id="buildBox"></div>
+    <div id="changes"></div>
+  </div>
+  <div class="card" id="artCard">
+    <strong>Card images</strong>
+    <div class="k" id="artInfo">No card artworks linked in this file yet. Setup, step 3 links them.</div>
+    <div id="artLinked"></div>
+  </div>
+</section>
+
+<!-- SETUP: once per person and per board, step by step -->
+<section id="pSetup" hidden>
+  <details class="step" id="s1">
+    <summary><span class="num" id="n1">1</span>Connect to the AF1 Tool</summary>
+    <div class="body">
+      <p>In the AF1 Tool open Team Cards, Figma Sync, Setup and click <b>Create plugin token</b>. Paste it here. You do this once.</p>
+      <div class="row"><input type="text" id="token" placeholder="Paste the token" /><button class="primary" id="saveToken">Connect</button></div>
+    </div>
   </details>
-</div>
+  <details class="step" id="s2">
+    <summary><span class="num" id="n2">2</span>Which campaign is this board?</summary>
+    <div class="body">
+      <p>The plugin builds and syncs the landing pages of one campaign per Figma board. On a board without landing pages, like the Team Cards board, skip this step.</p>
+      <div class="row"><select id="campaign2"></select></div>
+    </div>
+  </details>
+  <details class="step" id="s3">
+    <summary><span class="num" id="n3">3</span>Link the card artworks</summary>
+    <div class="body">
+      <p>Open the page with the card designs. The plugin finds the artworks and guesses which card each one is. Check the guesses and link them. From then on a design change becomes the card image by itself.</p>
+      <div class="row"><button class="primary" id="artScan">Find card artworks on this page</button></div>
+      <div id="artList"></div>
+    </div>
+  </details>
+  <details class="step" id="s4">
+    <summary><span class="num" id="n4">4</span>Options</summary>
+    <div class="body">
+      <div class="row"><label><input type="checkbox" id="live"> Live sync every 20 s while this window is open</label></div>
+      <div class="row"><button id="rebuild">Rebuild all screens</button><button id="changeToken">Change token</button></div>
+    </div>
+  </details>
+</section>
 <div id="log"></div>
 
 <script>
@@ -54,7 +104,36 @@
   let diffs = [];
 
   $("saveToken").onclick = () => { log("Connecting …"); post("save-token", { token: $("token").value }); };
-  $("changeToken").onclick = () => { $("tokenBox").hidden = false; };
+  const tab = (t) => { $("pSync").hidden = t !== "sync"; $("pSetup").hidden = t !== "setup"; $("tSync").classList.toggle("on", t === "sync"); $("tSetup").classList.toggle("on", t === "setup"); };
+  $("changeToken").onclick = () => { $("s1").open = true; $("token").focus(); };
+  $("tSync").onclick = () => tab("sync");
+  $("tSetup").onclick = () => tab("setup");
+  $("goSetup").onclick = () => { tab("setup"); $("s1").open = true; };
+  const done = (n, ok) => { $("n" + n).classList.toggle("ok", !!ok); $("n" + n).textContent = ok ? "✓" : String(n); };
+  $("campaign2").onchange = (e) => { if (e.target.value) { log("Switching to " + e.target.selectedOptions[0].textContent + " …"); post("set-campaign", { key: e.target.value }); } };
+  $("artScan").onclick = () => { $("artList").innerHTML = "<p>Looking at this page …</p>"; post("art-scan"); };
+  function artCandidates(m) {
+    if (!m.items.length) { $("artList").innerHTML = `<p>No card-sized artworks (4:5) on the page “${esc(m.page)}”. Open the page with the cards and try again.</p>`; return; }
+    const opts = (sel) => `<option value="">Not a card, skip</option>` + m.cards.map((c) => `<option value="${esc(c.id)}" ${c.id === sel ? "selected" : ""}>${esc(c.name)}${c.race ? " · " + esc(c.race) : ""} (${esc(c.id)})</option>`).join("");
+    $("artList").innerHTML = `<p>${m.items.length} artwork${m.items.length === 1 ? "" : "s"} on “${esc(m.page)}”. Click a name to see it. Tick the ones to link.</p>` +
+      m.items.map((it, i) => `<div class="cand"><input type="checkbox" class="aSel" data-i="${i}" ${it.best && !it.linked ? "checked" : ""}><div><span class="link aGo" data-n="${it.node}">${esc(it.label.slice(0, 70))}</span>${it.linked ? ' <span class="chip">linked</span>' : ""}<select class="aCard" data-i="${i}">${opts(it.best)}</select></div></div>`).join("") +
+      `<div class="row"><button class="primary big" id="artLink">Link ticked artworks and upload</button></div>`;
+    document.querySelectorAll(".aGo").forEach((x) => (x.onclick = () => post("art-focus", { node: x.dataset.n })));
+    document.querySelectorAll(".aCard").forEach((x) => (x.onchange = () => { const cb = document.querySelector(`.aSel[data-i="${x.dataset.i}"]`); if (cb) cb.checked = !!x.value; }));
+    $("artLink").onclick = () => {
+      const links = [];
+      document.querySelectorAll(".aSel:checked").forEach((x) => { const card = document.querySelector(`.aCard[data-i="${x.dataset.i}"]`).value; if (card) links.push({ node: m.items[Number(x.dataset.i)].node, card }); });
+      if (!links.length) return log("Nothing ticked with a card.");
+      log("Linking " + links.length + " …"); post("art-link", { links });
+    };
+  }
+  function artStatus(m) {
+    done(3, m.linked.length > 0);
+    $("artInfo").textContent = m.linked.length ? `${m.linked.length} card artwork${m.linked.length === 1 ? "" : "s"} linked in this file. A design change becomes the card image by itself.` : "No card artworks linked in this file yet. Setup, step 3 links them.";
+    $("artLinked").innerHTML = m.linked.map((x) => `<div class="k">• <span class="link aGo2" data-n="${x.node}">${esc(x.name)}</span>${m.updated.includes(x.name) ? " · updated now" : ""}</div>`).join("") + (m.linked.length ? `<div class="row"><button id="artNow">Check now</button></div>` : "");
+    document.querySelectorAll(".aGo2").forEach((x) => (x.onclick = () => post("art-focus", { node: x.dataset.n })));
+    if ($("artNow")) $("artNow").onclick = () => post("art-sync");
+  }
   $("rebuild").onclick = () => { log("Rebuilding all screens …"); post("build"); };
   $("live").onchange = (e) => post("live", { on: e.target.checked });
   $("campaign").onchange = (e) => { log("Switching to " + e.target.selectedOptions[0].textContent + " …"); post("set-campaign", { key: e.target.value }); };
@@ -65,12 +144,14 @@
     sel.hidden = m.list.length < 2 && !!m.current;
     sel.innerHTML = (m.current ? "" : `<option value="">Pick the campaign …</option>`) + m.list.map((c) => `<option value="${esc(c.key)}" ${c.key === m.current ? "selected" : ""}>${esc(c.name)}${c.board ? "" : " (no board yet)"}</option>`).join("");
     const cur = m.list.find((c) => c.key === m.current);
+    $("campaign2").innerHTML = `<option value="">No campaign on this board</option>` + m.list.map((c) => `<option value="${esc(c.key)}" ${c.key === m.current ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+    done(2, !!m.current);
     $("sub").textContent = cur ? `${cur.name} · Figma, the AF1 Tool and staging stay in the same state.` : "Which campaign is this board for?";
   }
 
   function render(m) {
-    $("tokenBox").hidden = true; $("main").hidden = false;
-    if (m.pick) { $("status").innerHTML = "<strong>Pick the campaign of this board</strong> (top right). Boards are set on af1-ktulu.vercel.app/teamcards/figma."; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
+    $("noToken").hidden = true; $("main").hidden = false; done(1, true);
+    if (m.pick) { $("status").innerHTML = "<strong>No campaign on this board.</strong> For landing pages pick one in Setup, step 2. Card images sync below either way."; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
     if (m.wrong) { $("status").innerHTML = `<div class="warn"><strong>This file is not the board of ${esc(m.name)}.</strong><br>Nothing is built or synced here. ${m.boardUrl ? `Open <a href="${esc(m.boardUrl)}" target="_blank">its board</a>, pick another campaign, or` : "Pick another campaign or"} set this file as its board on af1-ktulu.vercel.app/teamcards/figma.</div>`; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
     $("live").checked = m.live;
     const st = m.stale || [];
@@ -121,13 +202,15 @@
     const m = e.data.pluginMessage; if (!m) return;
     if (m.type === "fetch-image") { try { const r = await fetch(m.url); if (!r.ok) throw new Error("image " + r.status); reply(m.reqId, await toJpeg(await r.blob(), 2400, 0.9)); } catch (err) { reply(m.reqId, null, err.message); } return; }
     if (m.type === "encode-image") { try { const j = await toJpeg(new Blob([new Uint8Array(m.bytes)]), 2400, 0.85); let b = ""; for (let i = 0; i < j.length; i += 0x8000) b += String.fromCharCode.apply(null, j.subarray(i, i + 0x8000)); reply(m.reqId, { base64: btoa(b) }); } catch (err) { reply(m.reqId, null, err.message); } return; }
-    if (m.type === "token") { $("token").value = m.token; if (!m.token) $("tokenBox").hidden = false; }
+    if (m.type === "token") { $("token").value = m.token; done(1, !!m.token); if (!m.token) { $("noToken").hidden = false; tab("setup"); $("s1").open = true; } }
+    if (m.type === "art-candidates") artCandidates(m);
+    if (m.type === "art-status") artStatus(m);
     if (m.type === "checked") render(m);
     if (m.type === "campaigns") campaigns(m);
     if (m.type === "progress") $("progress").textContent = m.msg;
     if (m.type === "synced") log(`Applied: ${m.toCms} to the CMS, ${m.toFigma} into Figma` + (m.open ? `, ${m.open} left` : "") + "." + (m.written.length ? "\n" + m.written.join("\n") : ""));
     if (m.type === "log") log(m.msg);
-    if (m.type === "error") { log(m.msg, true); if (/token/i.test(m.msg)) $("tokenBox").hidden = false; }
+    if (m.type === "error") { log(m.msg, true); if (/token/i.test(m.msg)) { tab("setup"); $("s1").open = true; } }
   };
   post("init");
 </script>

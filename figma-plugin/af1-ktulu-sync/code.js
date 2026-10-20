@@ -705,6 +705,93 @@ async function buildAll() {
   await sync({}, null, true);
 }
 
+// ---- card images from the Figma Team Cards board -------------------------
+// A card in the AF1 Tool can be linked to its artwork here (Setup → Card
+// artworks). Linked artworks are checked on every live tick: a small render is
+// compared with what was last uploaded; when the design changed, the artwork is
+// exported at 1080 × 1350 and becomes the card image (staging media).
+var art = { cards: [], last: 0, busy: false };
+// accents off (the sandbox may lack String.normalize)
+var ACC = { "á": "a", "à": "a", "â": "a", "ã": "a", "ä": "a", "é": "e", "è": "e", "ê": "e", "ë": "e", "í": "i", "ì": "i", "î": "i", "ï": "i", "ó": "o", "ò": "o", "ô": "o", "õ": "o", "ö": "o", "ú": "u", "ù": "u", "û": "u", "ü": "u", "ç": "c", "ñ": "n", "ß": "ss" };
+function deacc(t) { return String(t || "").toLowerCase().replace(/[^\u0000-\u007f]/g, function (ch) { return ACC[ch] != null ? ACC[ch] : ch; }); }
+async function artApi(method, body) {
+  var res = await fetch(apiUrl("_cards"), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  var j = await res.json();
+  if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
+  return j;
+}
+function fnv(bytes) { var h = 2166136261; for (var i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 16777619) >>> 0; } return h.toString(16) + "-" + bytes.length; }
+var isCardSize = function (n) { return n && n.width >= 400 && n.width <= 2200 && Math.abs(n.width / n.height - 0.8) < 0.03; };
+async function linkedHere() {
+  var fk = fileKey(), out = [];
+  for (var i = 0; i < art.cards.length; i++) {
+    var c = art.cards[i];
+    if (!c.figmaNode || (fk && c.figmaFile && c.figmaFile !== fk)) continue;
+    var n = await figma.getNodeByIdAsync(c.figmaNode).catch(function () { return null; });
+    if (n && isCardSize(n) && "exportAsync" in n) out.push({ card: c, node: n });
+  }
+  return out;
+}
+// quietly: only report when something was uploaded
+async function artSync(report) {
+  if (art.busy || !state.token) return;
+  art.busy = true;
+  try {
+    art.cards = (await artApi("GET")).cards || [];
+    var list = await linkedHere(), done = [], same = 0;
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      var thumb = await x.node.exportAsync({ format: "PNG", constraint: { type: "WIDTH", value: 160 } });
+      var h = fnv(thumb);
+      if (h === x.card.hash && x.card.hasImage) { same++; continue; }
+      progress("Card image " + x.card.name + " → AF1 Tool …");
+      var jpg = await x.node.exportAsync({ format: "JPG", constraint: { type: "WIDTH", value: 1080 } });
+      var slug = deacc(x.card.name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      await artApi("POST", { action: "card-image", card: x.card.id, data: figma.base64Encode(jpg), hash: h, name: "audif1_team-card_" + slug + ".jpg" });
+      x.card.hash = h; x.card.hasImage = true;
+      done.push(x.card.name);
+    }
+    if (done.length) log("Card image" + (done.length === 1 ? "" : "s") + " updated from Figma: " + done.join(", ") + ".");
+    send("art-status", { linked: list.map(function (x) { return { id: x.card.id, name: x.card.name, node: x.node.id }; }), updated: done, total: art.cards.length, report: !!report });
+  } catch (e) { if (report) log("⚠ Card images: " + (e && e.message ? e.message : e)); }
+  finally { art.busy = false; progress(""); }
+}
+// candidate artworks on this page and the card each one most likely is
+var DRIVER = { hul: ["nico", "hulkenberg"], bor: ["gabi", "gabriel", "bortoleto"] };
+var plain = function (t) { return deacc(t).replace(/[’']s\b/g, "").replace(/[^a-z0-9]+/g, " ").trim(); };
+var STOP = { team: 1, card: 1, audi: 1, formula: 1, the: 1, and: 1, f1: 1, grand: 1, prix: 1, "2026": 1, exclusive: 1, r20: 1 };
+function tokens(t) { var out = []; plain(t).split(" ").forEach(function (w) { if (w.length > 2 && !STOP[w]) { out.push(w); (DRIVER[w] || []).forEach(function (d) { out.push(d); }); } }); return out; }
+async function artScan() {
+  art.cards = (await artApi("GET")).cards || [];
+  var page = figma.currentPage;
+  var cand = page.findAll(function (n) { return (n.type === "FRAME" || n.type === "GROUP" || n.type === "COMPONENT" || n.type === "INSTANCE") && isCardSize(n) && n.visible; });
+  // outermost only (an artwork group holds a same-size content group)
+  cand = cand.filter(function (n) { var p = n.parent; while (p && p.type !== "PAGE") { if (cand.indexOf(p) >= 0) return false; p = p.parent; } return true; });
+  var df = {}; art.cards.forEach(function (c) { tokens(c.name + " " + c.race).forEach(function (w) { df[w] = (df[w] || 0) + 1; }); });
+  var linkedTo = {}; art.cards.forEach(function (c) { if (c.figmaNode) linkedTo[c.figmaNode] = c.id; });
+  var items = [];
+  for (var i = 0; i < cand.length && i < 60; i++) {
+    var n = cand[i];
+    var txt = n.findAll ? n.findAll(function (x) { return x.type === "TEXT"; }).map(function (x) { return x.characters; }).join(" ") : "";
+    var have = {}; tokens(txt + " " + n.name).forEach(function (w) { have[w] = 1; });
+    var best = null, bestScore = 0;
+    art.cards.forEach(function (c) {
+      var sc = 0; tokens(c.name + " " + c.race).forEach(function (w) { if (have[w]) sc += 1 / (df[w] || 1); });
+      if (sc > bestScore) { bestScore = sc; best = c.id; }
+    });
+    var label = plain(txt).slice(0, 80) || n.name;
+    items.push({ node: n.id, label: label, best: linkedTo[n.id] || (bestScore >= 0.5 ? best : ""), linked: linkedTo[n.id] || "" });
+  }
+  send("art-candidates", { items: items, cards: art.cards.map(function (c) { return { id: c.id, name: c.name, race: c.race }; }), page: page.name });
+}
+async function artLink(links) {
+  var fk = fileKey();
+  for (var i = 0; i < links.length; i++) await artApi("POST", { action: "link-art", card: links[i].card, file: fk, node: links[i].node });
+  log("Linked " + links.length + " artwork" + (links.length === 1 ? "" : "s") + ". Uploading the images …");
+  await artSync(true);
+}
+function focusNode(id) { figma.getNodeByIdAsync(id).then(function (n) { if (n) { figma.viewport.scrollAndZoomIntoView([n]); figma.currentPage.selection = [n]; } }); }
+
 // ---- sync ----------------------------------------------------------------
 async function check() {
   sendCampaigns();
@@ -764,7 +851,9 @@ async function sync(decisions, only, quiet) {
 }
 
 setInterval(async function () {
-  if (!state.live || state.busy || !state.token || !state.campaign || wrongBoard()) return;
+  if (!state.live || state.busy || !state.token) return;
+  await artSync(false);
+  if (!state.campaign || wrongBoard()) return;
   state.busy = true;
   try {
     // a rebuild queued in the AF1 Tool runs even while the plugin stays open
@@ -791,11 +880,16 @@ figma.ui.onmessage = async function (msg) {
         var pre = await api("GET"); state.data = pre;
         if (pre.command && /^build/.test(pre.command.command)) { log("A full rebuild was requested in the AF1 Tool, building now …"); await buildAll(); }
         await check();
-      }
+      } else if (state.token) await check();
+      if (state.token) await artSync(false);
     }
     if (msg.type === "save-token") { state.token = msg.token.trim(); await figma.clientStorage.setAsync("token", state.token); await loadCampaigns(); await check(); }
     if (msg.type === "set-campaign") { state.campaign = msg.key; state.data = null; figma.root.setSharedPluginData(NS, "campaign", msg.key); await check(); }
     if (msg.type === "copy-across") { await copyAcross(msg.keys); await check(); }
+    if (msg.type === "art-scan") await artScan();
+    if (msg.type === "art-link") { await artLink(msg.links); await artScan(); }
+    if (msg.type === "art-sync") await artSync(true);
+    if (msg.type === "art-focus") focusNode(msg.node);
     if (msg.type === "check") await check();
     if (msg.type === "build") { await buildAll(); await check(); }
     if (msg.type === "apply") { await sync(msg.decisions, msg.only); await check(); }

@@ -434,3 +434,48 @@ export async function setCardImage(id: string, file: Blob, filename: string, by:
   await saveCards(cards);
   return { imageUrl: card.imageUrl, mediaId: media.id, folder: folder?.name ?? null };
 }
+
+// ---- card artwork in Figma -------------------------------------------------------
+// A card can be linked to its artwork on the Figma Team Cards board. The Figma
+// plugin then exports the artwork and keeps the card image current by itself
+// (it uploads again when the design changes; figmaArtHash is what it last sent).
+export async function linkCardArt(id: string, art: { file: string; node: string } | null, by: string) {
+  const cards = await listCards();
+  const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  if (!card) throw new Error("card not found");
+  const brief = { ...(card.brief ?? {}) };
+  if (art) {
+    brief.figmaFile = art.file;
+    brief.figmaNode = art.node;
+  } else {
+    delete brief.figmaFile;
+    delete brief.figmaNode;
+    delete brief.figmaArtHash;
+  }
+  card.brief = brief;
+  card.updatedAt = new Date().toISOString();
+  card.log = [{ at: card.updatedAt, by, summary: art ? `Linked to its Figma artwork (${art.node})` : "Figma artwork link removed" }, ...card.log].slice(0, 50);
+  await saveCards(cards);
+  return { id: card.id, figmaFile: brief.figmaFile, figmaNode: brief.figmaNode };
+}
+
+export async function setCardArtHash(id: string, hash: string) {
+  const cards = await listCards();
+  const card = cards.find((c) => c.id === id);
+  if (!card) return;
+  card.brief = { ...(card.brief ?? {}), figmaArtHash: hash };
+  await saveCards(cards);
+}
+
+// what the plugin needs to link and refresh artworks
+export async function cardsForArt() {
+  return (await listCards()).map((c) => ({
+    id: c.id,
+    name: c.name,
+    race: String(c.brief?.race ?? c.raceLabel ?? ""),
+    hasImage: !!c.imageUrl,
+    figmaFile: c.brief?.figmaFile ?? null,
+    figmaNode: c.brief?.figmaNode ?? null,
+    hash: c.brief?.figmaArtHash ?? null,
+  }));
+}

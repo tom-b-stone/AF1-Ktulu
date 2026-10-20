@@ -40,12 +40,24 @@ export default function Page() {
   const [imported, setImported] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [ck, setCk] = useState<string>("sin");
+  const [tab, setTab] = useState<"sync" | "setup">("sync");
+  const [artLinked, setArtLinked] = useState<number | null>(null);
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    try { setInstalled(localStorage.getItem("af1-plugin-installed") === "1"); } catch {}
+  }, []);
   const { data: session } = useSession();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
 
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("c");
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get("c");
     if (q) setCk(q);
+    if (sp.get("tab") === "setup" || window.location.hash === "#boards" || window.location.hash === "#plugin") setTab("setup");
+    fetch("/api/teamcards")
+      .then((r) => r.json())
+      .then((j) => setArtLinked((j.cards ?? []).filter((c: { brief?: { figmaNode?: string } }) => c.brief?.figmaNode).length))
+      .catch(() => {});
     void loadCampaigns();
   }, []);
   const loadCampaigns = () =>
@@ -57,7 +69,7 @@ export default function Page() {
     setCk(k);
     setS(null);
     setError(null);
-    window.history.replaceState(null, "", `/teamcards/figma?c=${k}`);
+    window.history.replaceState(null, "", `/teamcards/figma?c=${k}${tab === "setup" ? "&tab=setup" : ""}`);
   };
 
   const load = () =>
@@ -112,23 +124,36 @@ export default function Page() {
             ))}
           </div>
         )}
-        <div style={{ color: "var(--muted)", fontSize: 13 }}>
+        <div role="tablist" style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", margin: "10px 0 12px" }}>
+          {(["sync", "setup"] as const).map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => { setTab(t); window.history.replaceState(null, "", `/teamcards/figma?c=${ck}${t === "setup" ? "&tab=setup" : ""}`); }}
+              style={{ all: "unset", cursor: "pointer", padding: "8px 14px", fontSize: 14, fontWeight: 600, color: tab === t ? "var(--fg)" : "var(--muted)", boxShadow: tab === t ? "inset 0 -2px 0 var(--accent)" : undefined }}
+            >
+              {t === "sync" ? "Sync" : "Setup"}
+            </button>
+          ))}
+        </div>
+        <div style={{ color: "var(--muted)", fontSize: 13 }} hidden={tab !== "sync"}>
           Texts and images edited in Figma or in the staging CMS. Approve a change and it is copied to the other side.
           {s && <> Last checked {when(s.figma?.reportedAt)}{s.campaign.figmaFile ? <> · <a href={figmaLink()} target="_blank" rel="noreferrer">Open the Figma board ↗</a></> : <> · <a href="#boards">No Figma board yet</a></>}</>}
         </div>
       </div>
 
-      {error && <div style={{ color: "#e06c5b" }}>{error}</div>}
-      {!s && !error && <div style={{ color: "var(--muted)" }}>Checking Figma and the staging CMS…</div>}
+      {tab === "sync" && error && <div style={{ color: "#e06c5b" }}>{error}</div>}
+      {tab === "sync" && !s && !error && <div style={{ color: "var(--muted)" }}>Checking Figma and the staging CMS…</div>}
 
-      {s && changes.length === 0 && (
+      {tab === "sync" && s && changes.length === 0 && (
         <div style={{ padding: 22, borderRadius: 14, border: "1px solid rgba(111,207,124,.4)", background: "rgba(111,207,124,.08)", fontSize: 16 }}>
           ✓ <b>In sync.</b> Figma and the staging CMS show the same content.
           {s.pending > 0 && <span style={{ color: "var(--muted)", fontSize: 13 }}> {s.pending} approved change{s.pending === 1 ? " is" : "s are"} waiting for the Figma plugin.</span>}
         </div>
       )}
 
-      {s && changes.length > 0 && (
+      {tab === "sync" && s && changes.length > 0 && (
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <b style={{ fontSize: 16 }}>
@@ -193,41 +218,75 @@ export default function Page() {
           </div>
         </div>
       )}
-      {result && <div style={{ fontSize: 13 }}>{result}</div>}
+      {tab === "sync" && result && <div style={{ fontSize: 13 }}>{result}</div>}
 
-      <Boards campaigns={campaigns} current={ck} onSaved={(l) => { setCampaigns(l); void load(); }} />
+      {tab === "setup" && (
+        <Setup
+          steps={[
+            {
+              title: "Install the Figma plugin",
+              done: installed,
+              lead: "Once per computer. The plugin builds the campaign pages in Figma, syncs texts both ways and keeps the card images current.",
+              body: (
+                <>
+                  <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                    <li><a href="/downloads/af1-ktulu-sync.zip" download>Download the plugin</a> and unzip it.</li>
+                    <li>Figma desktop app: menu Plugins → Development → <i>Import plugin from manifest…</i> and pick <code>manifest.json</code>.</li>
+                  </ol>
+                  <button className="btn" style={{ justifySelf: "start" }} onClick={() => { try { localStorage.setItem("af1-plugin-installed", "1"); } catch {} setInstalled(true); }}>
+                    {installed ? "Installed" : "Done, it's installed"}
+                  </button>
+                </>
+              ),
+            },
+            {
+              title: "Connect the plugin",
+              done: !!tokenAt,
+              lead: "Your personal key. Paste it once in the plugin under Setup, step 1. It stays saved in your Figma.",
+              body: (
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <button className={tokenAt ? "btn" : "btn btn-primary"} onClick={async () => { const r = await fetch("/api/sitemap/token", { method: "POST" }).then((x) => x.json()); setToken(r.token); setTokenAt(new Date().toISOString()); }}>
+                    {tokenAt ? "Make a new token" : "Create plugin token"}
+                  </button>
+                  {tokenAt && !token && <span style={{ color: "var(--muted)", fontSize: 12 }}>Created {when(tokenAt)}. A new one replaces it.</span>}
+                  {token && <code style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 6, userSelect: "all" }}>{token}</code>}
+                </div>
+              ),
+            },
+            {
+              title: "Pick the Figma board of each campaign",
+              done: !!campaigns.find((c) => c.key === ck)?.figmaFile,
+              lead: "One board per campaign. Paste the Figma link; the plugin builds that campaign there and nowhere else.",
+              body: (
+                <>
+                  <Boards campaigns={campaigns} current={ck} onSaved={(l) => { setCampaigns(l); void load(); }} />
+                  {isAdmin && (
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <button className="btn" onClick={async () => { setImported("Updating …"); const r = await fetch(`/api/sitemap/${ck}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "import-cards" }) }).then((x) => x.json()); setImported(r.error ? r.error : `${r.added.length} new, ${r.total} cards in total.`); }}>
+                        Admin: update the card list from this campaign
+                      </button>
+                      {imported && <span style={{ color: "var(--muted)" }}>{imported}</span>}
+                    </div>
+                  )}
+                </>
+              ),
+            },
+            {
+              title: "Link the card artworks",
+              done: (artLinked ?? 0) > 0,
+              lead: "So card images come from the design by themselves. Open the Team Cards board in Figma, run the plugin, Setup, step 3: it finds the artworks and suggests the card for each one. After that every design change becomes the card image automatically.",
+              body: (
+                <div style={{ fontSize: 13 }}>
+                  {artLinked === null ? "Checking …" : artLinked ? `${artLinked} card${artLinked === 1 ? " is" : "s are"} linked to an artwork.` : "No card is linked to an artwork yet."}{" "}
+                  <a href="https://www.figma.com/design/GTdJnVBixOYab3V4qzKcEC/05-1_AF1_Design_Loyalty?node-id=3059-35" target="_blank" rel="noreferrer">Open the Team Cards board ↗</a>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
 
-      <section id="plugin" style={{ display: "grid", gap: 10, fontSize: 13, padding: 18, border: "1px solid var(--border)", borderRadius: 14 }}>
-        <b style={{ fontSize: 15 }}>Install the Figma plugin</b>
-        <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
-          <li>
-            <a href="/downloads/af1-ktulu-sync.zip" download>Download the plugin (zip)</a> and unzip it anywhere on your computer.
-          </li>
-          <li>Figma desktop app → menu Plugins → Development → <i>Import plugin from manifest…</i> → pick <code>manifest.json</code> in the unzipped folder.</li>
-          <li>Create your plugin token below and paste it into the plugin once (it stays saved in your Figma).</li>
-          <li>Open the campaign&apos;s Figma board and run Plugins → Development → AF1 Ktulu Sync. The plugin picks the campaign of that board by itself.</li>
-        </ol>
-        <div style={{ color: "var(--muted)", fontSize: 12 }}>
-          Keep the plugin open while you work: it checks every 20 seconds. A text you change on a mobile screen goes to the CMS and from there to the desktop screen.
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button className="btn" onClick={async () => { const r = await fetch("/api/sitemap/token", { method: "POST" }).then((x) => x.json()); setToken(r.token); setTokenAt(new Date().toISOString()); }}>
-            {tokenAt ? "New plugin token" : "Create plugin token"}
-          </button>
-          {tokenAt && !token && <span style={{ color: "var(--muted)", fontSize: 12 }}>Token created {when(tokenAt)}. A new one replaces it.</span>}
-          {token && <code style={{ padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 6, userSelect: "all" }}>{token}</code>}
-          {isAdmin && (
-            <>
-              <button className="btn" onClick={async () => { setImported("Updating …"); const r = await fetch(`/api/sitemap/${ck}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "import-cards" }) }).then((x) => x.json()); setImported(r.error ? r.error : `${r.added.length} new, ${r.total} cards in total.`); }}>
-                Update the card list
-              </button>
-              {imported && <span style={{ color: "var(--muted)" }}>{imported}</span>}
-            </>
-          )}
-        </div>
-      </section>
-
-      <details style={{ fontSize: 13 }}>
+      <details style={{ fontSize: 13 }} hidden={tab !== "sync"}>
         <summary style={{ cursor: "pointer", color: "var(--muted)" }}>History</summary>
         <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
           {!s?.log.length && <div style={{ color: "var(--muted)", fontSize: 12 }}>No syncs yet.</div>}
@@ -332,6 +391,45 @@ function Boards({ campaigns, current, onSaved }: { campaigns: Campaign[]; curren
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+// Setup as a short onboarding: numbered steps, one open at a time, each says
+// why in one line; done steps show a tick and fold away.
+type Step = { title: string; lead: string; done: boolean; body: React.ReactNode };
+function Setup({ steps }: { steps: Step[] }) {
+  const first = steps.findIndex((x) => !x.done);
+  const [open, setOpen] = useState<number>(first < 0 ? -1 : first);
+  const allDone = steps.every((x) => x.done);
+  return (
+    <section aria-label="Setup" style={{ display: "grid", gap: 10, maxWidth: 820 }}>
+      <div style={{ fontSize: 13, color: "var(--muted)" }}>
+        {allDone ? "All set. Open a step to change something." : `${steps.filter((x) => x.done).length} of ${steps.length} done. Takes about five minutes.`}
+      </div>
+      {steps.map((st, i) => {
+        const isOpen = open === i;
+        return (
+          <div key={st.title} style={{ border: `1px solid ${isOpen ? "var(--border-2)" : "var(--border)"}`, borderRadius: 12, background: isOpen ? "var(--bg-2)" : "transparent" }}>
+            <button onClick={() => setOpen(isOpen ? -1 : i)} aria-expanded={isOpen} style={{ all: "unset", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", width: "100%", boxSizing: "border-box", padding: "14px 16px" }}>
+              <span style={{ width: 24, height: 24, borderRadius: 99, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, flexShrink: 0, background: st.done ? "#2e7d4f" : "var(--surface)", color: st.done ? "#fff" : "var(--fg)" }}>{st.done ? "✓" : i + 1}</span>
+              <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{st.title}</span>
+              <span style={{ color: "var(--muted)", fontSize: 12 }}>{st.done ? "Done" : isOpen ? "" : "Open"}</span>
+            </button>
+            {isOpen && (
+              <div style={{ padding: "0 16px 16px 52px", display: "grid", gap: 12, fontSize: 13 }}>
+                <div style={{ color: "var(--muted)", lineHeight: 1.5 }}>{st.lead}</div>
+                {st.body}
+                {i < steps.length - 1 && (
+                  <button className="btn" style={{ justifySelf: "start" }} onClick={() => setOpen(i + 1)}>
+                    Next step
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }

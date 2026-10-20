@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvePluginToken } from "@/lib/connectorTokens";
 import { MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, getPending, loadModel, mediaFile, previewSync, uploadFromFigma, getCampaign, listCampaigns } from "@/lib/sitemapSync";
+import { cardsForArt, linkCardArt, setCardArtHash, setCardImage } from "@/lib/teamCards";
 
 // Endpoint for the "AF1 Ktulu Sync" Figma plugin (figma-plugin/ in this
 // repo). The plugin runs in Figma's sandbox (origin "null"), so it can't
@@ -30,6 +31,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const campaign = ctx.params.campaign;
   // "_campaigns" → every campaign and its Figma board, so the plugin can pick the one of the open file
   if (campaign === "_campaigns") return json({ campaigns: await listCampaigns(), user: rec.email });
+  // "_cards" → every Team Card with its linked Figma artwork (card images)
+  if (campaign === "_cards") return json({ cards: await cardsForArt(), user: rec.email });
   const c = await getCampaign(campaign);
   if (!c) return json({ error: "unknown campaign" }, 404);
   // ?media=<id> → the image itself (for the plugin's image fills)
@@ -71,6 +74,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     alt?: string;
   } | null;
   try {
+    // card artworks (any file): link a card to an artwork, upload its export as the card image
+    if (campaign === "_cards") {
+      const x = b as unknown as { action?: string; card?: string; file?: string; node?: string; data?: string; hash?: string; name?: string };
+      if (x?.action === "link-art") return json(await linkCardArt(String(x.card), x.node ? { file: String(x.file ?? ""), node: String(x.node) } : null, rec.email));
+      if (x?.action === "card-image") {
+        if (!x.data || !x.card) return json({ error: "card and image required" }, 400);
+        const bytes = Buffer.from(x.data, "base64");
+        if (bytes.byteLength > 4_000_000) return json({ error: "image over 4 MB" }, 400);
+        const r = await setCardImage(x.card, new Blob([bytes], { type: "image/jpeg" }), x.name || `${x.card}.jpg`, rec.email, "the Figma Team Cards board (plugin)");
+        if (x.hash) await setCardArtHash(x.card, x.hash);
+        console.log(`[figma] ${rec.email} card image ${x.card} from Figma`);
+        return json(r);
+      }
+      return json({ error: "unknown action" }, 400);
+    }
     if (b?.action === "check") return json(await previewSync(campaign, b.figma ?? {}));
     if (b?.action === "ack-command") {
       await clearCommand(campaign);
