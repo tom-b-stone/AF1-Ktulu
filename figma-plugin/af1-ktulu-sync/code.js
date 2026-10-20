@@ -754,7 +754,7 @@ async function artSync(report) {
       // Asset Uploader rules: WebP from the UI (the sandbox can't encode it), named after the Figma layer
       var png = await x.node.exportAsync({ format: "PNG", constraint: { type: "WIDTH", value: 1080 } });
       var enc = await askUI("encode-image", { bytes: Array.from(png), webp: true });
-      await artApi("POST", { action: "card-image", card: x.card.id, data: enc.base64, mime: enc.mime, hash: h, art: x.node.name });
+      await artApi("POST", { action: "card-image", card: x.card.id, data: enc.base64, mime: enc.mime, hash: h, art: /^AF1_[A-Za-z]+_Card_/.test(x.node.name) ? x.node.name : (x.node.parent && /^AF1_[A-Za-z]+_Card_/.test(x.node.parent.name) ? x.node.parent.name : x.node.name) });
       x.card.hash = h; x.card.hasImage = true;
       done.push(x.card.name);
     }

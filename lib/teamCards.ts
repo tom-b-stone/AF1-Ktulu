@@ -419,21 +419,21 @@ export async function setCardType(ids: string[], type: { id: string; title: stri
 // when it follows that pattern), an alt text checked against the brand rules,
 // the year and Grand Prix content tags, folder "Team Cards". A card that is on
 // staging gets it as its badge image too.
-const pascal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, " ").trim().split(/\s+/).map((w) => w[0]?.toUpperCase() + w.slice(1)).join("");
+const pascal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
 const under = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[’']/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
 export function cardImageName(card: CardRecord, artName?: string, ext = "webp"): string {
   if (artName && /^AF1_[A-Za-z]+_Card_/.test(artName)) return `${under(artName)}.${ext}`;
-  const type = pascal(String(card.brief?.badgeType ?? card.badgeTypeLabel ?? "Team")) || "Team";
-  const race = pascal(String(card.brief?.race ?? card.raceLabel ?? "Season"));
+  const type = pascal(String(card.brief?.badgeType || card.badgeTypeLabel || "Team")) || "Team";
+  const race = pascal(String(card.brief?.race || card.raceLabel || "Season")) || "Season";
   const yy = String(card.brief?.season ?? "2026").slice(-2);
   const name = under(card.name.replace(new RegExp(String(card.brief?.race ?? "~~"), "i"), ""));
   return `AF1_${type}_Card_${race}${yy}_${name}.${ext}`;
 }
 
 export function cardImageAlt(card: CardRecord): string {
-  const type = String(card.brief?.badgeType ?? card.badgeTypeLabel ?? "").trim();
-  const race = String(card.brief?.race ?? card.raceLabel ?? "").trim();
+  const type = String(card.brief?.badgeType || card.badgeTypeLabel || "").trim();
+  const race = String(card.brief?.race || card.raceLabel || "").trim();
   const long = `Team Card "${card.name}"${type ? `, ${type} card` : ""}${race ? `, ${race} Grand Prix 2026` : ""}, Audi Revolut F1® Team`;
   return long.length <= 125 ? long : `Team Card "${card.name}"${type ? `, ${type} card` : ""}`.slice(0, 125);
 }
