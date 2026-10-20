@@ -111,17 +111,16 @@ export default function LoginPage() {
       <header>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/slash-logo.png" alt="SLASH" width={124} height={25} style={{ height: 24, width: "auto" }} />
-        <span style={{ fontSize: 12, color: "#8c8c8c", letterSpacing: "0.08em" }}>^(;,;)^ internal tools</span>
+        <span style={{ fontSize: 12, color: "#8c8c8c", letterSpacing: "0.08em" }}>^(;,;)^</span>
       </header>
 
       <main>
         <div className="card">
-          <div className="eyebrow">SLASH.DIGITAL · Audi Revolut F1® Team</div>
           <div className="mark">
             <Wordmark />
           </div>
           <p className="lead">
-            The team&apos;s tools for audif1.com: UTM Studio, Asset Uploader, SEO Studio, GP Mini-Zine and more. Sign in with your <span className="red">slash.digital</span> Google account.
+            <span className="red">*</span> <strong>Ktulu</strong> (n.), short, simplified spelling of <em>Cthulhu</em>: an ancient, god-like cosmic entity that sleeps in the sunken city of R&apos;lyeh. It reaches into the dreams of humans and is worshipped by a cult spread across the world. Its existence exceeds human understanding, and those who witness it are often driven to madness.
           </p>
           <Suspense fallback={null}>
             <SignIn />
