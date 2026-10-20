@@ -27,9 +27,10 @@ const idOf = (v: Json) => (v && typeof v === "object" ? v.id : v);
 
 export async function campaignOfCard(c: CardRecord): Promise<{ name: string; root: string } | null> {
   if (c.brief?.campaign) return { name: String(c.brief.campaign), root: "" };
-  const race = String(c.brief?.race ?? c.raceLabel ?? "").toLowerCase();
+  const plain = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const race = plain(String(c.brief?.race || c.raceLabel || ""));
   if (!race) return null;
-  const hit = (await listCampaigns()).find((x) => x.race && x.race.toLowerCase() === race);
+  const hit = (await listCampaigns()).find((x) => x.race && plain(x.race) === race);
   return hit ? { name: hit.name, root: hit.root } : null;
 }
 
