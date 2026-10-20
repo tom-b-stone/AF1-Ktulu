@@ -6,6 +6,7 @@
 // table with search, filters in the column headers and sorting.
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Replace from "./Replace";
 import { cardTemplate } from "@/lib/cardTemplate";
 import TrackerImport from "./TrackerImport";
@@ -81,6 +82,13 @@ export default function Page() {
   const [fCampaign, setFCampaign] = useState(ALL);
   const [fType, setFType] = useState(ALL);
   const [fQuick, setFQuick] = useState(ALL);
+  const [replacing, setReplacing] = useState(false);
+  useEffect(() => {
+    if (!replacing) return;
+    const k = (e: KeyboardEvent) => e.key === "Escape" && setReplacing(false);
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [replacing]);
 
   const load = () =>
     fetch("/api/teamcards")
@@ -243,35 +251,13 @@ export default function Page() {
             {summary.disabled > 0 && <Stat n={summary.disabled} label="Disabled" active={fQuick === "Disabled"} onClick={() => setFQuick(fQuick === "Disabled" ? ALL : "Disabled")} />}
             <Stat n={summary.core} label="Core cards" />
           </div>
-          <div style={{ display: "grid", gap: 8, fontSize: 12, color: "var(--muted)" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-              <span style={{ minWidth: 120 }}>Campaigns</span>
-              {summary.campaigns.map(([name, n]) => (
-                <button key={name} className="btn" style={{ ...chip, borderColor: fCampaign === name ? "var(--accent)" : undefined }} onClick={() => setFCampaign(fCampaign === name ? ALL : name)}>
-                  {name} · {n}
-                </button>
-              ))}
-            </div>
-            {summary.top.length > 0 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                <span style={{ minWidth: 120 }}>Most often missing</span>
-                {summary.top.map(([m, n]) => (
-                  <button key={m} className="btn" style={{ ...chip, color: "#ff9a84", borderColor: q === m ? "var(--accent)" : undefined }} onClick={() => setQ(q === m ? "" : m)}>
-                    {m} · {n}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </section>
       )}
-
-      {cards && <Replace cards={cards as never} onApplied={() => void load()} />}
 
       {cards && (
         <section aria-label="All cards" style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by name, ID, partner, missing text…" style={{ width: "min(340px, 100%)" }} aria-label="Filter cards" />
+            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search cards: name, ID, partner, text…" style={{ width: "min(340px, 100%)" }} aria-label="Search cards" />
             <span style={{ fontSize: 12, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
               {shown.length} of {cards.length} cards
             </span>
@@ -280,6 +266,9 @@ export default function Page() {
                 Reset filters
               </button>
             )}
+            <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setReplacing(true)} title="Replace wording on all cards (EN/DE), with preview before anything is written">
+              Replace…
+            </button>
           </div>
           <div className="beui beui-compact">
             <Table<Row>
@@ -297,6 +286,16 @@ export default function Page() {
           </div>
         </section>
       )}
+
+      {replacing && cards &&
+        createPortal(
+          <div role="dialog" aria-modal="true" aria-label="Replace on all cards" onClick={(e) => e.target === e.currentTarget && setReplacing(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "start center", padding: "8vh 16px 16px", overflow: "auto" }}>
+            <div className="card" style={{ width: "min(880px, 100%)", padding: 22, background: "var(--bg-2)" }}>
+              <Replace cards={cards as never} initialFind={q} onClose={() => setReplacing(false)} onApplied={() => void load()} />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

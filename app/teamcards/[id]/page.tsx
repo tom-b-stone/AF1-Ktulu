@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FIELDS, fieldByKey, fieldIssues, type FieldDef, type Loc } from "@/lib/teamCardFields";
 import { SitePhone } from "../SitePhone";
+import { cardTemplate } from "@/lib/cardTemplate";
 import { HINTS, LANES, STEPS, TEAM_RULES, kindOf, stationsFor, type Lane, type Station } from "../journey";
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -508,26 +509,71 @@ export default function EditCard() {
             : check.missing.length
               ? { label: "Fix the setup in the CMS", why: "The missing items above are set in Payload, not in the texts.", go: "", de: false }
               : { label: "Walk through the journey", why: "Nothing urgent. Check the screens, then review and push to staging.", go: "page", de: false };
-        const facts: [string, string][] = [
-          ["Type", meta.core ? `Core · ${meta.type ?? ""}`.replace(/ · $/, "") : meta.type ?? "Unknown"],
-          ["Task", kindLabel],
-          ["Reward", reward ?? "Not set"],
-          ["Campaign", campaign || "None"],
-          ["Race", meta.race ?? row?.raceLabel ?? "None"],
-          ["Partner", meta.partner ?? "None"],
-          ["Last change", row?.log?.[0] ? `${row.log[0].summary} · ${new Date(row.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "No changes logged"],
-        ];
+        const typeLabel = meta.type ?? card.badgeTypeLabel ?? "";
+        const where = [campaign, meta.race ?? row?.raceLabel, meta.partner].filter((x, i, arr) => x && arr.indexOf(x) === i).join(" · ");
+        const question = textOf("question", "en").trim();
+        const about = textOf("description", "en").trim() || textOf("revealDescription", "en").trim();
+        const placement: string = row?.placement ?? "";
+        const HOW: Record<string, string> = {
+          "q-and-a": "answer a question in their own words",
+          survey: "pick an answer in a short survey",
+          "hot-or-not": "vote hot or not",
+          page: "visit the page",
+          link: "open the link",
+        };
+        const how = HOW[row?.mechanic ?? ""] ?? (kind === "qa" ? HOW["q-and-a"] : kind === "hot" ? HOW["hot-or-not"] : row?.mechanic ? HOW.survey : "");
+        const earn = how
+          ? `Fans ${how}${placement ? ` (${placement.replace(/^[^·]*·\s*/, "")})` : ""}${question ? `: "${question.length > 110 ? question.slice(0, 110) + "…" : question}"` : ""}. ${reward ? `They get ${reward}.` : "No reward is set yet."}`
+          : "How fans earn this card is not defined yet.";
+        const last = row?.log?.[0] ? `${row.log[0].summary} · ${new Date(row.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "No changes logged";
+        const lbl: CSSProperties = { fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: C.mute };
         return (
-          <div style={{ padding: "22px 24px 60px", maxWidth: 980, display: "grid", gap: 16 }}>
-            <section aria-label="Summary" style={{ borderRadius: 18, background: C.panel, border: `1px solid ${C.line}`, padding: "20px 22px", display: "grid", gap: 14 }}>
+          <div style={{ padding: "22px 24px 60px", maxWidth: 1040, display: "grid", gap: 16 }}>
+            {/* the card itself: image, name, type, campaign, how to earn, context */}
+            <section aria-label="The card" style={{ borderRadius: 18, background: C.panel, border: `1px solid ${C.line}`, padding: 22, display: "grid", gridTemplateColumns: "minmax(140px, 200px) minmax(0, 1fr)", gap: 28, alignItems: "start" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={card.imageUrl || cardTemplate(card.name)} alt={card.imageUrl ? `${card.name} card` : "Card image not defined yet"} style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 12, transform: "rotate(-3deg)", boxShadow: "0 24px 40px -22px rgba(0,0,0,.8)" }} />
+              <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {meta.core && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: C.lava, color: "#fff" }}>CORE</span>}
+                  <span style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 999, border: `1px solid ${C.line2}`, color: typeLabel ? C.fg : C.mute, fontStyle: typeLabel ? undefined : "italic" }}>{typeLabel || "Card type not defined yet"}</span>
+                  <span style={{ fontSize: 12, color: C.mute, fontVariantNumeric: "tabular-nums" }}>{card.id}</span>
+                </div>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <h2 style={{ margin: 0, fontSize: 26, lineHeight: 1.15, fontWeight: 700, letterSpacing: "-0.01em" }}>{card.name}</h2>
+                  <div style={{ fontSize: 13, color: where ? C.fg : C.mute, fontStyle: where ? undefined : "italic" }}>{where || "No campaign yet"}</div>
+                </div>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <span style={lbl}>How to earn</span>
+                  <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55, maxWidth: 640 }}>{earn}</p>
+                </div>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <span style={lbl}>Context</span>
+                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, maxWidth: 640, color: about ? "#cfcdcc" : C.mute, fontStyle: about ? undefined : "italic", display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{about || "No card description yet."}</p>
+                </div>
+              </div>
+            </section>
+
+            {/* status: what is missing, and where to start */}
+            <section aria-label="Status" style={{ borderRadius: 18, border: `1px solid ${check.missing.length ? "rgba(227,62,26,.35)" : C.line}`, background: check.missing.length ? "rgba(227,62,26,.05)" : "transparent", padding: "18px 22px", display: "grid", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={lbl}>Status</span>
                 <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: tone.bg, color: tone.fg, fontWeight: 600 }}>
                   {tone.label}{check.quick === "Missing" ? ` · ${check.missing.length}` : ""}
                 </span>
-                <span style={{ fontSize: 12, color: C.mute }}>{card.id}</span>
+                <span style={{ fontSize: 12, color: C.mute }}>Last change: {last}</span>
               </div>
-              <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.6, maxWidth: 760 }}>{sentences.join(" ")}</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 4 }}>
+              {check.missing.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {check.missing.map((m) => (
+                    <span key={m} style={{ fontSize: 12.5, padding: "4px 10px", borderRadius: 8, background: "rgba(227,62,26,.12)", color: "#ffb5a6" }}>{m}</span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13.5 }}>{check.quick === "Disabled" ? "Switched off: the CMS does not link card, engagement and module yet." : "The setup is complete."}</div>
+              )}
+              <div style={{ fontSize: 13, color: C.mute }}>{sentences.slice(2).join(" ")}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <button
                   style={{ ...btn(true), height: 36, fontWeight: 600 }}
                   onClick={() => {
@@ -544,17 +590,8 @@ export default function EditCard() {
               </div>
             </section>
 
-            {check.missing.length > 0 && (
-              <section aria-label="Missing in the setup" style={{ borderRadius: 18, border: `1px solid rgba(227,62,26,.35)`, background: "rgba(227,62,26,.06)", padding: "16px 20px" }}>
-                <h2 style={{ margin: "0 0 8px", fontSize: 13.5, fontWeight: 650 }}>Missing in the setup</h2>
-                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4, fontSize: 13.5, color: "#ffb5a6" }}>
-                  {check.missing.map((m) => <li key={m}>{m}</li>)}
-                </ul>
-              </section>
-            )}
-
             <section aria-label="Journey" style={{ borderRadius: 18, border: `1px solid ${C.line}`, padding: "16px 20px", display: "grid", gap: 10 }}>
-              <h2 style={{ margin: 0, fontSize: 13.5, fontWeight: 650 }}>The journey, step by step</h2>
+              <span style={lbl}>The journey, step by step</span>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
                 {laneSteps.map(({ x, issues, changed: ch }) => {
                   const L = LANES[x.lanes[0]];
@@ -572,18 +609,6 @@ export default function EditCard() {
                   );
                 })}
               </div>
-            </section>
-
-            <section aria-label="Details" style={{ borderRadius: 18, border: `1px solid ${C.line}`, padding: "16px 20px" }}>
-              <h2 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 650 }}>Details</h2>
-              <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "140px 1fr", rowGap: 8, columnGap: 14, fontSize: 13.5 }}>
-                {facts.map(([k, v]) => (
-                  <div key={k} style={{ display: "contents" }}>
-                    <dt style={{ color: C.mute }}>{k}</dt>
-                    <dd style={{ margin: 0 }}>{v}</dd>
-                  </div>
-                ))}
-              </dl>
             </section>
           </div>
         );

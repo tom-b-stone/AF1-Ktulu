@@ -12,8 +12,8 @@ type DiffRow = { card: string; label: string; locale: Loc | null; before: unknow
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export default function Replace({ cards, onApplied }: { cards: Card[]; onApplied: () => void }) {
-  const [find, setFind] = useState("");
+export default function Replace({ cards, onApplied, initialFind = "", onClose }: { cards: Card[]; onApplied: () => void; initialFind?: string; onClose?: () => void }) {
+  const [find, setFind] = useState(initialFind);
   const [repl, setRepl] = useState("");
   const [langs, setLangs] = useState<Loc[]>(["en", "de"]);
   const [step, setStep] = useState<string>("");
@@ -77,13 +77,20 @@ export default function Replace({ cards, onApplied }: { cards: Card[]; onApplied
   };
 
   return (
-    <section id="replace" aria-label="Search and replace" style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", display: "grid", gap: 10, background: "var(--bg-2)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <span className="section-label">Search and replace</span>
-        <span style={{ color: "var(--muted)", fontSize: 12 }}>Change wording on every card at once. Pick the hits, check, apply to staging.</span>
+    <section id="replace" aria-label="Replace" style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 20 }}>Replace on all cards</h2>
+          <span style={{ color: "var(--muted)", fontSize: 13 }}>Change wording on every card at once. Pick the hits, check, apply to staging.</span>
+        </div>
+        {onClose && (
+          <button className="btn" style={{ padding: "3px 10px" }} onClick={onClose} disabled={busy} aria-label="Close">
+            ✕
+          </button>
+        )}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-        <input className="input" placeholder="Find…" value={find} onChange={(e) => { setFind(e.target.value); setReview(null); setResult(null); }} aria-label="Find" />
+        <input className="input" placeholder="Find…" autoFocus value={find} onChange={(e) => { setFind(e.target.value); setReview(null); setResult(null); }} aria-label="Find" />
         <input className="input" placeholder="Replace with…" value={repl} onChange={(e) => { setRepl(e.target.value); setReview(null); }} aria-label="Replace with" />
       </div>
       <div style={{ display: "flex", gap: "8px 16px", flexWrap: "wrap", fontSize: 12, alignItems: "center" }}>
@@ -116,7 +123,7 @@ export default function Replace({ cards, onApplied }: { cards: Card[]; onApplied
         </div>
       )}
       {hits.length > 0 && (
-        <div style={{ maxHeight: 280, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+        <div style={{ maxHeight: "40vh", overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
         <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
           <tbody>
             {hits.map((h) => (
