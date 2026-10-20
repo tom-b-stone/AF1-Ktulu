@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { listCampaigns } from "@/lib/sitemapSync";
-import { applyChanges, badgeTypes, cardCheck, cardMeta, diff, listCards, setCardType, stagingLinks, type Change, createCard } from "@/lib/teamCards";
+import { applyChanges, badgeTypes, cardCheck, cardMeta, diff, listCards, setCardType, stagingLinks, type Change, createCard, prefillFrom, similarCards } from "@/lib/teamCards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,6 +34,12 @@ export async function POST(req: NextRequest) {
   try {
     // { action: "types" } → card types in use · { action: "set-type", ids, type } → set on several cards
     if (b?.action === "types") return NextResponse.json({ types: await badgeTypes() });
+    // { action: "similar", id } → cards to take texts from · { action: "prefill", id, from } → texts copied into the empty fields
+    if (b?.action === "similar") return NextResponse.json({ cards: await similarCards(String((b as unknown as { id?: string }).id ?? "")) });
+    if (b?.action === "prefill") {
+      const x = b as unknown as { id?: string; from?: string };
+      return NextResponse.json(await prefillFrom(String(x.id ?? ""), String(x.from ?? ""), session.user.email));
+    }
     // { action: "new", name, badgeType?, campaign?, race? } → a new card, set up step by step
     if (b?.action === "new") {
       const n = b as unknown as { name?: string; badgeType?: string; campaign?: string; race?: string };

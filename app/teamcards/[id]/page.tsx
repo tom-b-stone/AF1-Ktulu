@@ -12,6 +12,7 @@ import { FIELDS, fieldByKey, fieldIssues, type FieldDef, type Loc } from "@/lib/
 import { SitePhone } from "../SitePhone";
 import { cardTemplate } from "@/lib/cardTemplate";
 import SetupStep from "../SetupStep";
+import PrefillPicker from "../PrefillPicker";
 import { HINTS, LANES, STEPS, kindOf, stationsFor, type Lane, type Station } from "../journey";
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -101,7 +102,9 @@ export default function EditCard() {
   // guided setup: index into GUIDE, null when editing freely (?guided=1 starts it)
   const [guide, setGuide] = useState<number | null>(null);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("guided")) setGuide(0);
+    // ?guided=1 from the start, ?guided=page from that step on
+    const g = new URLSearchParams(window.location.search).get("guided");
+    if (g) setGuide(Math.max(0, GUIDE.findIndex((x) => x.step === g)));
   }, []);
   useEffect(() => {
     if (guide === null) return;
@@ -128,6 +131,7 @@ export default function EditCard() {
   const [ask2, setAsk2] = useState<{ title: string; body: string; ok: string; run: () => Promise<string> } | null>(null);
   const [askBusy, setAskBusy] = useState(false);
   const [actMsg, setActMsg] = useState<{ text: string; err?: boolean } | null>(null);
+  const [prefill, setPrefill] = useState(false);
   useEffect(() => {
     fetch(`/api/teamcards/${id}/from-prod`).then((r) => r.json()).then((j) => setProd(j.prod ?? null)).catch(() => {});
   }, [id]);
@@ -681,10 +685,21 @@ export default function EditCard() {
                   {next.label} <Icon d={I.right} size={14} />
                 </button>
                 <span style={{ fontSize: 12.5, color: C.mute }}>{next.why}</span>
-                <button onClick={() => setGuide(0)} style={{ ...btn(), marginLeft: "auto" }} title="Walk through card, engagement, module, reward and all texts, one step at a time">
-                  Guided setup
-                </button>
+                <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  <button onClick={() => setPrefill(!prefill)} style={btn(prefill)} title="Fill the empty texts from a card that works the same way">
+                    Prefill texts
+                  </button>
+                  <button onClick={() => setGuide(0)} style={btn()} title="Walk through card, engagement, module, reward and all texts, one step at a time">
+                    Guided setup
+                  </button>
+                </span>
               </div>
+              {prefill && (
+                <div style={{ display: "grid", gap: 8, padding: 14, borderRadius: 12, border: `1px solid ${C.line2}` }}>
+                  <span style={{ fontSize: 13 }}>Take the texts of a similar card into the empty fields. Its name becomes {card.name}. Nothing goes to staging.</span>
+                  <PrefillPicker compact cardId={card.id} onDone={() => window.location.reload()} />
+                </div>
+              )}
               {(!card.links.badge || prod || (row?.brief?.builtOnStaging ?? (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary)))) && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: 12, color: C.mute, marginRight: 4 }}>Staging:</span>

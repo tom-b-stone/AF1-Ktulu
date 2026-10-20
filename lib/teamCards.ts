@@ -166,6 +166,56 @@ export const saveCardsPublic = saveCards;
 // A card imported from the tracker that has no badge on staging yet.
 export const onStaging = (c: CardRecord) => !!c.staging.badgeId;
 
+// ---- prefill: texts from a similar card ----------------------------------------
+const plainName = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const mechOf = (c: CardRecord) => c.setup?.engagement?.type || c.mechanic || "";
+const filledTexts = (c: CardRecord) => FIELDS.filter((f) => f.localized && (c.values[f.key] as LocValue | undefined)?.en?.trim()).length;
+// cards that work like this one: same way to earn it first, then campaign, card type, how much text they have
+export async function similarCards(id: string): Promise<{ id: string; name: string; why: string; texts: number }[]> {
+  const cards = await listCards();
+  const me = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  if (!me) throw new Error("card not found");
+  const camp = plainName(String(me.brief?.campaign ?? ""));
+  const type = plainName(String(me.brief?.badgeType ?? me.badgeTypeLabel ?? ""));
+  return cards
+    .filter((c) => c.id !== me.id && filledTexts(c) >= 4)
+    .map((c) => {
+      const why: string[] = [];
+      let score = 0;
+      if (mechOf(me) && mechOf(c) === mechOf(me)) { score += 4; why.push("same engagement"); }
+      if (camp && plainName(String(c.brief?.campaign ?? "")) === camp) { score += 2; why.push("same campaign"); }
+      if (type && plainName(String(c.brief?.badgeType ?? c.badgeTypeLabel ?? "")) === type) { score += 1; why.push("same card type"); }
+      return { id: c.id, name: c.name, why: why.join(", ") || "has most texts", texts: filledTexts(c), score: score + filledTexts(c) / 100 };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map(({ score: _s, ...x }) => (void _s, x));
+}
+
+// copies the texts of another card into the empty fields of this one; the other card's
+// name becomes this card's name. Nothing goes to staging.
+export async function prefillFrom(id: string, fromId: string, by: string): Promise<{ card: CardRecord; filled: string[] }> {
+  const cards = await listCards();
+  const me = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  const src = cards.find((c) => c.id.toLowerCase() === fromId.toLowerCase());
+  if (!me || !src) throw new Error("card not found");
+  const swap = (t: string) => (t ? t.split(src.name).join(me.name) : t);
+  const filled: string[] = [];
+  for (const f of FIELDS) {
+    if (!f.localized || f.key === "publicTitle" || f.key === "engTitle") continue;
+    const from = src.values[f.key] as LocValue | undefined;
+    const cur = (me.values[f.key] as LocValue | undefined) ?? { en: "", de: "" };
+    if (!from?.en?.trim() && !from?.de?.trim()) continue;
+    if (cur.en?.trim() || cur.de?.trim()) continue;
+    me.values[f.key] = { en: swap(from.en ?? ""), de: swap(from.de ?? "") };
+    filled.push(f.label);
+  }
+  me.updatedAt = new Date().toISOString();
+  me.log = [{ at: me.updatedAt, by, summary: `Prefilled ${filled.length} texts from ${src.id} ${src.name}` }, ...me.log].slice(0, 50);
+  await saveCards(cards);
+  return { card: me, filled };
+}
+
 // A new card made in Ktulu (guided setup): next free TC number, only the brief
 // so far; texts, engagement and module follow step by step.
 export async function createCard(input: { name: string; badgeType?: string; campaign?: string; race?: string }, by: string): Promise<CardRecord> {
