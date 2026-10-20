@@ -10,7 +10,20 @@ type S = { diffs: { state: string }[]; pending: number; figma: { reportedAt: str
 
 export default function FigmaSyncBanner() {
   const [s, setS] = useState<S | null>(null);
-  const [hidden, setHidden] = useState(false);
+  // "Later" holds for four hours in this browser, so the note doesn't follow you from page to page
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return Date.now() < Number(window.localStorage.getItem("af1-figma-banner-later") || 0);
+    } catch {
+      return false;
+    }
+  });
+  const later = () => {
+    setHidden(true);
+    try {
+      window.localStorage.setItem("af1-figma-banner-later", String(Date.now() + 4 * 3600_000));
+    } catch {}
+  };
   const load = useCallback(() => {
     fetch("/api/sitemap/sin")
       .then((r) => r.json())
@@ -22,11 +35,9 @@ export default function FigmaSyncBanner() {
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
     window.addEventListener("af1:changed", onFocus);
-    const t = setInterval(load, 60000);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("af1:changed", onFocus);
-      clearInterval(t);
     };
   }, [load]);
   if (!s || hidden || !s.figma) return null;
@@ -36,7 +47,7 @@ export default function FigmaSyncBanner() {
   if (!toFigma && !fromFigma && !conflicts) return null;
   const figma = `https://www.figma.com/design/${s.campaign.figmaFile}/WorkingDoc?node-id=${s.campaign.figmaPage.replace(":", "-")}`;
   return (
-    <div role="status" style={{ position: "fixed", right: 24, bottom: 24, zIndex: 50, width: 360, padding: 16, borderRadius: 14, background: "var(--bg, #141313)", border: "1px solid var(--accent)", boxShadow: "0 12px 40px rgba(0,0,0,.35)", display: "grid", gap: 10, fontSize: 13 }}>
+    <div role="status" style={{ position: "fixed", right: 24, bottom: 24, zIndex: 50, width: 320, padding: 14, borderRadius: 14, background: "var(--bg, #141313)", border: "1px solid var(--accent)", boxShadow: "0 12px 40px rgba(0,0,0,.35)", display: "grid", gap: 10, fontSize: 13 }}>
       <strong>Figma isn&apos;t in sync</strong>
       <div style={{ color: "var(--muted)" }}>
         {toFigma > 0 && <div>{toFigma} change{toFigma === 1 ? "" : "s"} from the tool or the CMS {toFigma === 1 ? "is" : "are"} not in Figma yet. Open Figma and run AF1 Ktulu Sync. It applies them right away and stays live while it&apos;s open.</div>}
@@ -54,7 +65,7 @@ export default function FigmaSyncBanner() {
             Review
           </Link>
         )}
-        <button className="btn" onClick={() => setHidden(true)}>
+        <button className="btn" onClick={later}>
           Later
         </button>
       </div>

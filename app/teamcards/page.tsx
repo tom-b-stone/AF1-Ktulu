@@ -35,7 +35,10 @@ const REWARD: Record<string, string> = { noReward: "No reward", raffleSignup: "R
 const PREFIX: Record<string, string> = { SIN: "Singapore" };
 
 // a campaign (e.g. Singapore) is its own thing; the Grand Prix of a card is not its campaign
-const campaignOf = (c: Row) => c.meta.campaign || PREFIX[c.id.split("-")[0]] || "No campaign";
+// tags read "singapore 2026", briefs "Singapore": one name per campaign
+const titleCase = (t: string) => t.replace(/\s*\b20\d\d\b\s*$/, "").trim().replace(/(^|\s)(\p{L})/gu, (m) => m.toUpperCase());
+const campaignOf = (c: Row) => titleCase(c.meta.campaign || PREFIX[c.id.split("-")[0]] || "") || "No campaign";
+const numOf = (id: string) => Number(/(\d+)\s*$/.exec(id)?.[1] ?? 0);
 // when a card came into Ktulu: the import date, else its oldest log entry
 const addedAt = (c: Row) => Date.parse(String((c as unknown as { brief?: { importedAt?: string } }).brief?.importedAt ?? c.log[c.log.length - 1]?.at ?? c.updatedAt)) || 0;
 const gpOf = (c: Row) => c.meta.race || c.raceLabel || "No Grand Prix";
@@ -47,35 +50,23 @@ const QUICK_TONE: Record<Row["check"]["quick"], { bg: string; fg: string; label:
 };
 
 const ALL = "";
-function HeaderSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
+// a filter in the toolbar: reads "Status: All", turns lava when set
+function FilterSelect({ label, value, options, names, onChange }: { label: string; value: string; options: string[]; names?: Record<string, string>; onChange: (v: string) => void }) {
   return (
-    <select
-      aria-label={`Filter by ${label}`}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onPointerDown={(e) => e.stopPropagation()}
-      style={{ maxWidth: 130, height: 26, fontSize: 11.5, padding: "0 22px 0 10px", borderRadius: 999, appearance: "none", WebkitAppearance: "none", border: `1px solid ${value ? "var(--accent)" : "var(--border-2)"}`, background: `${value ? "rgba(255,45,0,.12)" : "var(--surface)"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b8a91' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center`, color: "var(--fg)", cursor: "pointer" }}
-    >
-      <option value={ALL}>All</option>
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {o}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function Stat({ n, label, tone, active, onClick }: { n: number; label: string; tone?: string; active?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="tc-stat"
-      style={{ textAlign: "left", padding: "10px 14px", borderRadius: 10, border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`, background: "var(--bg-2)", color: "inherit", cursor: onClick ? "pointer" : "default", display: "grid", gap: 2 }}
-    >
-      <div style={{ fontFamily: "var(--font-heading)", fontSize: 24, fontWeight: 800, lineHeight: 1.1, color: tone, fontVariantNumeric: "tabular-nums" }}>{n}</div>
-      <div style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>{label}</div>
-    </button>
+    <label style={{ position: "relative", display: "inline-flex", alignItems: "center", height: 32, padding: "0 28px 0 12px", borderRadius: 999, fontSize: 12.5, border: `1px solid ${value ? "var(--accent)" : "var(--border)"}`, background: value ? "rgba(255,45,0,.12)" : "transparent", color: value ? "var(--fg)" : "var(--muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+      {label}: <b style={{ fontWeight: 600, color: "var(--fg)", marginLeft: 4 }}>{value ? names?.[value] ?? value : "All"}</b>
+      <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden style={{ position: "absolute", right: 11 }}>
+        <path d="M1 1l4 4 4-4" stroke="currentColor" fill="none" strokeWidth="1.5" />
+      </svg>
+      <select aria-label={`Filter by ${label}`} value={value} onChange={(e) => onChange(e.target.value)} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}>
+        <option value={ALL}>All</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {names?.[o] ?? o}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -127,24 +118,14 @@ export default function Page() {
       if (!needle) return true;
       const hay = [c.name, c.id, campaignOf(c), typeOf(c), c.meta.partner, c.meta.race, MECH[c.mechanic ?? ""], REWARD[c.rewardType ?? ""], ...c.check.missing].join(" ").toLowerCase();
       return hay.includes(needle);
-    }).sort((a, b) => addedAt(b) - addedAt(a)); // newest cards first
+    }).sort((a, b) => Math.floor(addedAt(b) / 864e5) - Math.floor(addedAt(a) / 864e5) || numOf(b.id) - numOf(a.id)); // newest cards first: latest import day, then highest number
   }, [cards, q, fCampaign, fGp, fType, fQuick]);
 
   const summary = useMemo(() => {
     const list = cards ?? [];
-    const top: Record<string, number> = {};
-    list.forEach((c) => c.check.missing.forEach((m) => (top[m] = (top[m] ?? 0) + 1)));
     const campaigns: Record<string, number> = {};
     list.forEach((c) => (campaigns[campaignOf(c)] = (campaigns[campaignOf(c)] ?? 0) + 1));
-    return {
-      total: list.length,
-      ready: list.filter((c) => c.check.quick === "Ready").length,
-      missing: list.filter((c) => c.check.quick === "Missing").length,
-      disabled: list.filter((c) => c.check.quick === "Disabled").length,
-      core: list.filter((c) => c.meta.core).length,
-      top: Object.entries(top).sort((a, b) => b[1] - a[1]).slice(0, 6),
-      campaigns: Object.entries(campaigns).sort((a, b) => b[1] - a[1]),
-    };
+    return { total: list.length, campaigns: Object.entries(campaigns).sort((a, b) => (a[0] === "No campaign" ? 1 : b[0] === "No campaign" ? -1 : b[1] - a[1])) };
   }, [cards]);
 
   const filtered = !!(q || fCampaign || fGp || fType || fQuick);
@@ -169,11 +150,11 @@ export default function Page() {
     },
     // eslint-disable-next-line @next/next/no-img-element
     { key: "img", header: "", width: "56px", cell: (c) => <img src={c.imageUrl || cardTemplate(c.name)} alt={c.imageUrl ? "" : "Card image not defined yet"} title={c.imageUrl ? undefined : "Card image not defined yet (template)"} style={{ width: 36, aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 4, display: "block" }} /> },
-    { key: "id", header: "No.", width: "84px", sortable: true, sortValue: (c) => c.id, cell: (c) => <span style={{ fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.id}</span> },
+    { key: "id", header: "No.", width: "78px", sortable: true, sortValue: (c) => c.id, cell: (c) => <span style={{ fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.id}</span> },
     {
       key: "name",
       header: "Card",
-      width: "250px",
+      width: "240px",
       sortable: true,
       cell: (c) => (
         <div style={{ minWidth: 0 }}>
@@ -187,10 +168,9 @@ export default function Page() {
     {
       key: "check",
       header: "Status",
-      width: "340px",
+      width: "300px",
       sortable: true,
       sortValue: (c) => (c.check.quick === "Missing" ? 0 : c.check.quick === "Ready" ? 1 : 2) * 100 - c.check.missing.length,
-      headerExtra: <HeaderSelect label="status" value={fQuick} options={opts.quick} onChange={setFQuick} />,
       cell: (c) => {
         const t = QUICK_TONE[c.check.quick];
         return (
@@ -200,8 +180,9 @@ export default function Page() {
               {c.check.quick === "Missing" ? ` · ${c.check.missing.length}` : ""}
             </span>
             {c.check.missing.length > 0 && (
-              <div title={c.check.missing.join(", ")} style={{ fontSize: 12, color: "#ff9a84", lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                {c.check.missing.join(" · ")}
+              <div title={c.check.missing.join(", ")} style={{ fontSize: 12, color: "#ff9a84", lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {c.check.missing.slice(0, 2).join(" · ")}
+                {c.check.missing.length > 2 && <span style={{ color: "var(--muted)" }}> +{c.check.missing.length - 2} more</span>}
               </div>
             )}
           </div>
@@ -211,10 +192,9 @@ export default function Page() {
     {
       key: "type",
       header: "Type",
-      width: "190px",
+      width: "140px",
       sortable: true,
       sortValue: (c) => typeOf(c),
-      headerExtra: <HeaderSelect label="type" value={fType} options={opts.type} onChange={setFType} />,
       cell: (c) => (
         <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
           {c.meta.core && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "var(--accent)", color: "#fff", marginRight: 6 }}>CORE</span>}
@@ -225,7 +205,7 @@ export default function Page() {
     {
       key: "campaign",
       header: "Campaign",
-      width: "200px",
+      width: "130px",
       sortable: true,
       sortValue: (c) => campaignOf(c),
       cell: (c) => <span style={{ fontSize: 12, color: campaignOf(c) === "No campaign" ? "var(--muted)" : undefined }}>{campaignOf(c)}</span>,
@@ -233,10 +213,9 @@ export default function Page() {
     {
       key: "gp",
       header: "Grand Prix",
-      width: "200px",
+      width: "140px",
       sortable: true,
       sortValue: (c) => gpOf(c),
-      headerExtra: <HeaderSelect label="Grand Prix" value={fGp} options={opts.gp} onChange={setFGp} />,
       cell: (c) => (
         <div style={{ fontSize: 12 }}>
           <div style={{ color: gpOf(c) === "No Grand Prix" ? "var(--muted)" : undefined }}>{gpOf(c)}</div>
@@ -244,14 +223,32 @@ export default function Page() {
         </div>
       ),
     },
-    { key: "links", header: "Staging", width: "190px", cell: (c) => <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>{c.links.badge ? <a href={c.links.badge} target="_blank" rel="noreferrer">Card ↗</a> : <span style={{ color: "var(--muted)" }}>Not on staging yet</span>}{c.links.engagement && <> · <a href={c.links.engagement} target="_blank" rel="noreferrer">Engagement ↗</a></>}{c.links.page && <> · <a href={c.links.page} target="_blank" rel="noreferrer">Page ↗</a></>}</span> },
-    { key: "edit", header: "", width: "80px", cell: (c) => <Link className="btn btn-primary" href={`/teamcards/${c.id}`}>Edit</Link> },
+    {
+      key: "edit",
+      header: "",
+      width: "128px",
+      cell: (c) => (
+        <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+          <Link className="btn btn-primary" href={`/teamcards/${c.id}`} style={{ height: 30, padding: "0 12px" }}>
+            Edit
+          </Link>
+          {c.links.badge ? (
+            <a href={c.links.badge} target="_blank" rel="noreferrer" title="Open the card in the staging CMS" style={{ fontSize: 12, color: "var(--muted)" }}>
+              CMS ↗
+            </a>
+          ) : (
+            <span title="Not on staging yet" style={{ fontSize: 12, color: "var(--muted)", opacity: 0.6 }}>
+              —
+            </span>
+          )}
+        </span>
+      ),
+    },
   ];
 
   const chip = { padding: "3px 10px", fontSize: 12, borderRadius: 999 } as const;
   return (
     <div style={{ display: "grid", gap: 24, maxWidth: 1600 }}>
-      <style>{`.tc-stat{transition:border-color .15s,transform .15s}.tc-stat:active{transform:scale(.98)}`}</style>
       <header style={{ display: "grid", gap: 6, maxWidth: 760 }}>
         <h1 style={{ margin: 0 }}>Team Cards</h1>
         <p style={{ color: "var(--muted)", margin: 0, fontSize: 14, lineHeight: 1.5 }}>Every card with its texts, journey and staging links. Open a card to edit it step by step in the real frontend views.</p>
@@ -290,7 +287,10 @@ export default function Page() {
       {cards && (
         <section aria-label="All cards" style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search cards: name, ID, partner, text…" style={{ width: "min(340px, 100%)" }} aria-label="Search cards" />
+            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search cards: name, ID, partner, text…" style={{ width: "min(300px, 100%)" }} aria-label="Search cards" />
+            <FilterSelect label="Status" value={fQuick} options={opts.quick} names={{ Missing: "Needs attention" }} onChange={setFQuick} />
+            <FilterSelect label="Type" value={fType} options={opts.type} onChange={setFType} />
+            <FilterSelect label="Grand Prix" value={fGp} options={opts.gp} onChange={setFGp} />
             <span style={{ fontSize: 12, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
               {shown.length} of {cards.length} cards
             </span>

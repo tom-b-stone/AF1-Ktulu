@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { applySync, cardsForConfigurator, getCampaign, getCommand, queueCommand, status } from "@/lib/sitemapSync";
+import { applySync, cardsForConfigurator, getCampaign, clearCommand, getCommand, queueCommand, status } from "@/lib/sitemapSync";
 import { blueprints, buildPagesFromFigma, lastPagesBuild, type FigmaPage } from "@/lib/pagesFromFigma";
 import { importCampaignCards } from "@/lib/teamCards";
 import { isAdminEmail } from "@/lib/auth";
@@ -42,6 +42,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     // { action: "build-pages", pages } → same as the plugin's call (pages read from Figma elsewhere, e.g. by Claude)
     if (b?.action === "build-pages") return NextResponse.json(await buildPagesFromFigma(campaign, ((b as unknown as { pages?: FigmaPage[] }).pages ?? []) as FigmaPage[], session.user.email));
     // { action: "queue-pages" } → the Figma plugin builds the campaign's landing pages on staging next time it runs
+    if (b?.action === "cancel-pages") {
+      await clearCommand(campaign);
+      return NextResponse.json({ ok: true });
+    }
     if (b?.action === "queue-pages") {
       await queueCommand(campaign, "pages-from-figma", session.user.email);
       return NextResponse.json({ queued: true });

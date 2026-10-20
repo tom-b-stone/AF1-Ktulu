@@ -48,6 +48,11 @@ export default function BuildPages({ campaign, campaignName, figmaUrl, hasPages,
     setWaiting({ at: new Date().toISOString(), by: "you" });
   };
 
+  const cancel = async () => {
+    await fetch(`/api/sitemap/${campaign}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cancel-pages" }) }).catch(() => null);
+    setWaiting(null);
+  };
+
   const label = hasPages ? "Update the pages from Figma" : "Build the pages from Figma";
   const box: React.CSSProperties = { border: "1px solid var(--border)", borderRadius: 12, padding: compact ? 12 : 16, display: "grid", gap: 10, background: hasPages ? "transparent" : "rgba(255,45,0,.05)" };
 
@@ -74,11 +79,16 @@ export default function BuildPages({ campaign, campaignName, figmaUrl, hasPages,
           <span style={{ color: "var(--muted)" }}>
             Open the board in the Figma desktop app and run AF1 Ktulu Sync (Plugins → Development). It builds the pages right away and this box updates by itself.
           </span>
-          {figmaUrl && (
-            <a href={figmaUrl} target="_blank" rel="noreferrer" style={{ justifySelf: "start" }}>
-              Open the Figma board ↗
-            </a>
-          )}
+          <span style={{ display: "flex", gap: 14 }}>
+            {figmaUrl && (
+              <a href={figmaUrl} target="_blank" rel="noreferrer">
+                Open the Figma board ↗
+              </a>
+            )}
+            <button onClick={cancel} style={{ all: "unset", cursor: "pointer", color: "var(--muted)", textDecoration: "underline" }}>
+              Cancel
+            </button>
+          </span>
         </div>
       )}
       {err && <div style={{ color: "#e06c5b", fontSize: 13 }}>{err}</div>}

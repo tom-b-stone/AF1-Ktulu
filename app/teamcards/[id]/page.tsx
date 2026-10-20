@@ -560,7 +560,7 @@ export default function EditCard() {
         return (
           <div style={{ padding: "22px 24px 60px", maxWidth: 1040, display: "grid", gap: 16 }}>
             {/* the card itself: image, name, type, campaign, how to earn, context */}
-            <section aria-label="The card" style={{ borderRadius: 18, background: C.panel, border: `1px solid ${C.line}`, padding: 22, display: "grid", gridTemplateColumns: "minmax(140px, 200px) minmax(0, 1fr)", gap: 28, alignItems: "start" }}>
+            <section aria-label="The card" style={{ borderRadius: 18, background: C.panel, border: `1px solid ${C.line}`, padding: 24, display: "grid", gridTemplateColumns: "minmax(140px, 190px) minmax(0, 1fr)", columnGap: 28, rowGap: 20, alignItems: "start" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
                 <img src={card.imageUrl || cardTemplate(card.name)} alt={card.imageUrl ? `${card.name} card` : "Card image not defined yet"} style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 12, transform: "rotate(-3deg)", boxShadow: "0 24px 40px -22px rgba(0,0,0,.8)" }} />
@@ -603,10 +603,9 @@ export default function EditCard() {
                   <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, maxWidth: 640, color: about ? "#cfcdcc" : C.mute, fontStyle: about ? undefined : "italic", display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{about || "No card description yet."}</p>
                 </div>
               </div>
-            </section>
 
-            {/* status: what is missing, and where to start */}
-            <section aria-label="Status" style={{ borderRadius: 18, border: `1px solid ${check.missing.length ? "rgba(227,62,26,.35)" : C.line}`, background: check.missing.length ? "rgba(227,62,26,.05)" : "transparent", padding: "18px 22px", display: "grid", gap: 12 }}>
+            {/* status: what is missing, and where to start (same panel, below a line) */}
+            <div aria-label="Status" role="group" style={{ gridColumn: "1 / -1", borderTop: `1px solid ${C.line}`, paddingTop: 18, display: "grid", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <span style={lbl}>Status</span>
                 <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: tone.bg, color: tone.fg, fontWeight: 600 }}>
@@ -640,41 +639,22 @@ export default function EditCard() {
                 <span style={{ fontSize: 12.5, color: C.mute }}>{next.why}</span>
               </div>
               {(!card.links.badge || prod || (row?.brief?.builtOnStaging ?? (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary)))) && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: C.mute, marginRight: 4 }}>Staging:</span>
                   {prod && (
-                    <button style={btn(!card.links.badge)} onClick={() => setAsk2({ title: "Get this card from production?", body: `“${prod.title}” is live on production. Its texts, images, engagement and module are copied to staging. Whatever is on staging for this card now is overwritten.`, ok: "Yes, copy from production", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/from-prod`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Copied from production. Reload to see the staging content.\n" : "Not finished.\n") + stepsText(j); } })}>
+                    <button style={btn()} onClick={() => setAsk2({ title: "Get this card from production?", body: `“${prod.title}” is live on production. Its texts, images, engagement and module are copied to staging. Whatever is on staging for this card now is overwritten.`, ok: "Yes, copy from production", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/from-prod`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Copied from production. Reload to see the staging content.\n" : "Not finished.\n") + stepsText(j); } })}>
                       Get from production
                     </button>
                   )}
                   {(!card.links.badge || row?.brief?.builtOnStaging || (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary))) && (
-                    <button style={btn(!prod)} onClick={() => setAsk2({ title: "Build this card on staging?", body: "It is created as a disabled card with its texts in EN and DE, the card image, card type, Grand Prix and campaign. Links go to the campaign hub. Engagement and module on a page come next.", ok: "Yes, build it", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/create`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Built on staging (disabled). Reload to see the links.\n" : "Not built.\n") + stepsText(j); } })}>
+                    <button style={btn()} onClick={() => setAsk2({ title: "Build this card on staging?", body: "It is created as a disabled card with its texts in EN and DE, the card image, card type, Grand Prix and campaign. Links go to the campaign hub. Engagement and module on a page come next.", ok: "Yes, build it", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/create`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Built on staging (disabled). Reload to see the links.\n" : "Not built.\n") + stepsText(j); } })}>
                       {card.links.badge ? "Update on staging" : "Build on staging"}
                     </button>
                   )}
                   {actMsg && <span style={{ fontSize: 12.5, whiteSpace: "pre-wrap", color: actMsg.err ? "#e06c5b" : C.ok, flexBasis: "100%" }}>{actMsg.text}</span>}
                 </div>
               )}
-            </section>
-
-            <section aria-label="Journey" style={{ borderRadius: 18, border: `1px solid ${C.line}`, padding: "16px 20px", display: "grid", gap: 10 }}>
-              <span style={lbl}>The journey, step by step</span>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
-                {laneSteps.map(({ x, issues, changed: ch }) => {
-                  const L = LANES[x.lanes[0]];
-                  return (
-                    <button
-                      key={x.key}
-                      onClick={() => { setStep(x.key); setWhole(false); setStation(undefined); }}
-                      style={{ textAlign: "left", cursor: "pointer", borderRadius: 14, border: `1px solid ${C.line}`, borderLeft: `3px solid ${L.edge}`, background: L.tint, color: C.fg, padding: "12px 14px", display: "grid", gap: 4 }}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{STEPS.indexOf(x) + 1}. {x.title}</span>
-                      <span style={{ fontSize: 12, color: issues ? "#e06c5b" : C.mute }}>
-                        {issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "No issues"}{ch ? ` · ${ch} changed` : ""}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+            </div>
             </section>
           </div>
         );
@@ -843,16 +823,15 @@ export default function EditCard() {
           <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11.5, letterSpacing: ".06em" }}>Edit texts{changed.length ? ` · ${changed.length}` : ""}</span>
         </button>
         <div style={{ padding: "16px 18px 10px", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "start", gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: C.mute, textTransform: "uppercase", letterSpacing: ".08em" }}>{focusStation ? LANES[focusStation.lane].title : ""}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 650 }}>{focusStation?.label ?? "Pick a screen"}</div>
-            <div style={{ fontSize: 11.5, color: C.mute }}>{focusStation?.note}</div>
+            <div style={{ fontSize: 12, color: C.mute }}>{focusStation?.note}</div>
           </div>
           <button aria-label="Close" style={{ ...btn(), padding: "0 8px" }} onClick={() => setDrawer(false)}>
             <Icon d={I.x} />
           </button>
         </div>
-        <div style={{ overflowY: "auto", padding: "12px 18px 40px", display: "grid", gap: 12, alignContent: "start" }}>
+        <div style={{ overflowY: "auto", padding: "8px 8px 40px", display: "grid", gap: 2, alignContent: "start" }}>
           {drawerKeys.length === 0 && <div style={{ fontSize: 13, color: C.mute }}>Tap a text on any screen to edit it here.</div>}
           {drawerKeys.map((k) => (
             <FieldBox
@@ -913,62 +892,68 @@ function FieldBox({
   }, [focused]);
   const long = f?.kind === "textarea" || value.en.length > 60;
   const dirty = value.en !== initial.en || value.de !== initial.de;
+  const deMissing = !!value.en.trim() && !value.de.trim();
+  // one message per problem: "German missing" is shown once, in the DE field
+  const own = (l: Loc) => issues[l].filter((x) => !/DE is empty|German is missing/i.test(x));
+  const count = (l: Loc) => (f?.maxWords ? `${words(value[l])}/${f.maxWords} words` : `${value[l].length}`);
+  const over = (l: Loc) => !!f?.maxWords && words(value[l]) > f.maxWords;
   return (
-    <div ref={ref} style={{ borderRadius: 12, border: `1px solid ${focused ? C.lava : C.line}`, background: focused ? "rgba(255,45,0,.05)" : "#18181b", padding: 12, display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>
+    <div ref={ref} style={{ borderRadius: 10, border: `1px solid ${focused ? "rgba(255,45,0,.55)" : "transparent"}`, background: focused ? "rgba(255,45,0,.04)" : "transparent", padding: "10px 12px 12px", display: "grid", gap: 6, transition: "background .15s, border-color .15s" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
           {f?.label ?? k}
-          {dirty && <span style={{ color: C.lava, fontWeight: 500, fontSize: 11.5 }}> · changed</span>}
+          {dirty && <span title="Changed, not saved yet" style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: C.lava, marginLeft: 6, verticalAlign: "middle" }} />}
         </div>
-        <span style={{ fontSize: 10.5, color: C.mute, textAlign: "right" }}>on {where.join(", ")}</span>
+        <span title={`Shown on ${where.join(", ")}`} style={{ fontSize: 10.5, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{where.join(" · ")}</span>
       </div>
       {h && (
-        <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#c7c5cb", background: "rgba(127,184,255,.06)", border: "1px solid rgba(127,184,255,.18)", borderRadius: 8, padding: "7px 9px" }}>
-          <span style={{ color: "#7fb8ff", marginTop: 1 }}>
-            <Icon d={I.info} size={14} />
-          </span>
-          <span>
-            {h.what}
-            {h.rules?.length ? <span style={{ color: C.mute }}> {h.rules.join(" · ")}</span> : null}
-          </span>
+        <div title={h.rules?.join(" · ")} style={{ fontSize: 12, color: C.mute, lineHeight: 1.45 }}>
+          {h.what}
+          {focused && h.rules?.length ? <span> {h.rules.join(" · ")}</span> : null}
         </div>
       )}
-      {(["en", "de"] as Loc[]).map((l) => (
-        <div key={l} style={{ display: "grid", gap: 4 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: C.mute }}>
-            <span style={{ fontWeight: 700, letterSpacing: ".06em" }}>{l.toUpperCase()}</span>
-            <span style={{ color: f?.maxWords && words(value[l]) > f.maxWords ? "#e06c5b" : C.mute }}>{f?.maxWords ? `${words(value[l])}/${f.maxWords} words` : `${value[l].length} characters`}</span>
-          </div>
-          <textarea
-            aria-label={`${f?.label ?? k} ${l.toUpperCase()}`}
-            rows={long ? Math.max(2, Math.ceil(value[l].length / 52)) : 1}
-            value={value[l]}
-            onFocus={onFocus}
-            onChange={(e) => onChange(l, e.target.value)}
-            onBlur={() => onBlur(l)}
-            style={{ width: "100%", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "8px 10px", borderRadius: 8, border: `1px solid ${issues[l].length ? "rgba(224,108,91,.6)" : !value[l].trim() && l === "de" && value.en.trim() ? "rgba(255,45,0,.5)" : C.line2}`, background: "#0f0f12", color: C.fg, fontFamily: "inherit" }}
-          />
-          {issues[l].length > 0 && (
-            <div role="alert" style={{ fontSize: 11.5, color: "#e06c5b" }}>
-              {issues[l].join(" · ")}
+      {(["en", "de"] as Loc[]).map((l) => {
+        const bad = own(l).length > 0 || over(l);
+        const miss = l === "de" && deMissing;
+        return (
+          <div key={l} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr)", gap: 8, alignItems: "start" }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: miss ? C.lava : C.mute, paddingTop: 9 }}>{l.toUpperCase()}</span>
+            <div style={{ display: "grid", gap: 3 }}>
+              <textarea
+                aria-label={`${f?.label ?? k} ${l.toUpperCase()}`}
+                rows={long ? Math.max(2, Math.ceil(value[l].length / 48)) : 1}
+                value={value[l]}
+                placeholder={miss ? "German missing" : l === "en" ? "English text" : "Deutscher Text"}
+                onFocus={onFocus}
+                onChange={(e) => onChange(l, e.target.value)}
+                onBlur={() => onBlur(l)}
+                style={{ width: "100%", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 8, border: `1px solid ${bad ? "rgba(224,108,91,.7)" : miss ? "rgba(255,45,0,.45)" : C.line2}`, background: "#0f0f12", color: C.fg, fontFamily: "inherit" }}
+              />
+              {(bad || focused) && (
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+                  <span role={bad ? "alert" : undefined} style={{ color: "#e06c5b" }}>{own(l).join(" · ")}</span>
+                  <span style={{ color: over(l) ? "#e06c5b" : C.mute, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{count(l)}</span>
+                </div>
+              )}
             </div>
-          )}
-          {l === "de" && value.en.trim() && !value.de.trim() && <div style={{ fontSize: 11.5, color: C.lava }}>German is missing.</div>}
+          </div>
+        );
+      })}
+      {focused && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 34 }}>
+          <details style={{ fontSize: 11.5, color: C.mute }}>
+            <summary style={{ cursor: "pointer" }}>Team rules</summary>
+            <ul style={{ margin: "6px 0 0", paddingLeft: 16, display: "grid", gap: 2 }}>
+              {TEAM_RULES.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </details>
+          <button onClick={onSave} style={{ all: "unset", cursor: "pointer", fontSize: 11.5, color: C.mute, display: "inline-flex", gap: 5, alignItems: "center" }} title="Keep this EN/DE wording as an approved phrasing for this field">
+            <Icon d={I.book} size={13} /> Save to lexicon
+          </button>
         </div>
-      ))}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <details style={{ fontSize: 11.5, color: C.mute }}>
-          <summary style={{ cursor: "pointer" }}>Team rules</summary>
-          <ul style={{ margin: "6px 0 0", paddingLeft: 16, display: "grid", gap: 2 }}>
-            {TEAM_RULES.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </details>
-        <button onClick={onSave} style={{ ...btn(), height: 26, fontSize: 11.5 }} title="Keep this EN/DE wording as an approved phrasing for this field">
-          <Icon d={I.book} size={13} /> Save to lexicon
-        </button>
-      </div>
+      )}
     </div>
   );
 }
