@@ -65,7 +65,8 @@ export function stationsFor(kind: TemplateKind): Station[] {
   return [...task, ...out, ...inn, ...col];
 }
 
-// field hints: what it is, where it shows, the copy rules that apply (KAI + team rules)
+// field hints: "what" is shown to people in the text panel; "rules" are copy rules for
+// Claude and the copy check only, never shown in the tool
 export const HINTS: Record<string, { what: string; rules?: string[] }> = {
   modCategory: { what: "Small line above the module headline.", rules: ["Usually the race, e.g. R17 | Singapore GP"] },
   modHeadline: { what: "Headline of the module on the page.", rules: ["Sentence case", "No exclamation marks on the website"] },

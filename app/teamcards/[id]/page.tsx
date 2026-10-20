@@ -12,7 +12,7 @@ import { FIELDS, fieldByKey, fieldIssues, type FieldDef, type Loc } from "@/lib/
 import { SitePhone } from "../SitePhone";
 import { cardTemplate } from "@/lib/cardTemplate";
 import SetupStep from "../SetupStep";
-import { HINTS, LANES, STEPS, TEAM_RULES, kindOf, stationsFor, type Lane, type Station } from "../journey";
+import { HINTS, LANES, STEPS, kindOf, stationsFor, type Lane, type Station } from "../journey";
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type LV = { en: string; de: string };
@@ -908,10 +908,7 @@ function FieldBox({
         <span title={`Shown on ${where.join(", ")}`} style={{ fontSize: 10.5, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{where.join(" · ")}</span>
       </div>
       {h && (
-        <div title={h.rules?.join(" · ")} style={{ fontSize: 12, color: C.mute, lineHeight: 1.45 }}>
-          {h.what}
-          {focused && h.rules?.length ? <span> {h.rules.join(" · ")}</span> : null}
-        </div>
+        <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45 }}>{h.what}</div>
       )}
       {(["en", "de"] as Loc[]).map((l) => {
         const bad = own(l).length > 0 || over(l);
@@ -942,14 +939,7 @@ function FieldBox({
       })}
       {focused && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 34 }}>
-          <details style={{ fontSize: 11.5, color: C.mute }}>
-            <summary style={{ cursor: "pointer" }}>Team rules</summary>
-            <ul style={{ margin: "6px 0 0", paddingLeft: 16, display: "grid", gap: 2 }}>
-              {TEAM_RULES.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-          </details>
+          <span />
           <button onClick={onSave} style={{ all: "unset", cursor: "pointer", fontSize: 11.5, color: C.mute, display: "inline-flex", gap: 5, alignItems: "center" }} title="Keep this EN/DE wording as an approved phrasing for this field">
             <Icon d={I.book} size={13} /> Save to lexicon
           </button>
