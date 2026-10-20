@@ -1086,9 +1086,9 @@ function Consistency({
         const scope = row.sc.title.split(" · ")[0].toLowerCase();
         if (g.cards.length > row.same + 1) {
           // most related cards say it differently: change this card
-          suggestions.push({ id: `${bl.k}|${row.sc.key}|${g.en}|here`, k: bl.k, why: `${g.cards.length} cards of ${scope} say it differently`, whereNow: "this card", now: bl.my, next: { en: theirs.en, de: theirs.de || bl.my.de }, apply: () => onTake(bl.k, { en: theirs.en, de: theirs.de || bl.my.de }) });
+          suggestions.push({ id: `${bl.k}|${row.sc.key}|${g.en}|here`, k: bl.k, why: `most cards of ${scope} (${g.cards.length}) use other wording`, whereNow: "this card", now: bl.my, next: { en: theirs.en, de: theirs.de || bl.my.de }, apply: () => onTake(bl.k, { en: theirs.en, de: theirs.de || bl.my.de }) });
         } else {
-          suggestions.push({ id: `${bl.k}|${row.sc.key}|${g.en}|there`, k: bl.k, why: `same text on ${g.cards.length} card${g.cards.length === 1 ? "" : "s"} of ${scope}: ${g.cards.slice(0, 3).map((c) => c.name).join(", ")}${g.cards.length > 3 ? " …" : ""}`, whereNow: `${g.cards.length} other card${g.cards.length === 1 ? "" : "s"}`, now: theirs, next: bl.my, apply: () => onSync(bl.k, ids) });
+          suggestions.push({ id: `${bl.k}|${row.sc.key}|${g.en}|there`, k: bl.k, why: `worded differently on ${g.cards.length} card${g.cards.length === 1 ? "" : "s"} of ${scope}: ${g.cards.slice(0, 3).map((c) => c.name).join(", ")}${g.cards.length > 3 ? " …" : ""}`, whereNow: `${g.cards.length} other card${g.cards.length === 1 ? "" : "s"}`, now: theirs, next: bl.my, apply: () => onSync(bl.k, ids) });
         }
       }
     }
