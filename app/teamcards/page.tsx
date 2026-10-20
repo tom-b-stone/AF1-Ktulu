@@ -91,7 +91,7 @@ export default function Page() {
   }, []);
   // temporary until the tracker is retired: the one-way import sits in the left menu
   useSidebarContent(
-    <SideSection title="Tracker · temporary">
+    <SideSection title="Temporary">
       <TrackerImport side onDone={() => void load()} />
     </SideSection>,
     [],
