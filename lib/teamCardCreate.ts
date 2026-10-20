@@ -125,10 +125,20 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     steps.push({ step: pageId ? `links go to ${setup.module?.pageUrl ? "/" + setup.module.pageUrl : "the campaign hub /" + camp?.root}` : "no page on staging yet: links left generic", ok: true });
 
     // 4 create (idempotent by title)
-    const badgeId = await upsertLocalised("badges", doc, `where[or][0][title][equals]=${encodeURIComponent(title)}&where[or][1][title][equals]=${encodeURIComponent(card.name)}&locale=en`, steps, "card (disabled)");
+    // the card's own staging badge first (by id), so a changed title never creates a second one
+    const find = card.staging.badgeId ? `where[id][equals]=${card.staging.badgeId}` : `where[or][0][title][equals]=${encodeURIComponent(title)}&where[or][1][title][equals]=${encodeURIComponent(card.name)}&locale=en`;
+    const badgeId = await upsertLocalised("badges", doc, find, steps, "card (disabled)");
+    // earlier duplicates with the same title, disabled, left by a run that stopped: removed
+    const dups = await stg(`/badges?where[title][equals]=${encodeURIComponent(title)}&where[isDraft][equals]=true&limit=10&depth=0&locale=en`).catch(() => ({ docs: [] }));
+    for (const d of (dups.docs ?? []) as Json[]) if (d.id !== badgeId) { await stg(`/badges/${d.id}`, { method: "DELETE" }).catch(() => null); steps.push({ step: `duplicate card ${d.id} removed`, ok: true }); }
     if (engagementId) {
-      await stg(`/engagements/${engagementId}`, { method: "PATCH", body: JSON.stringify({ loggedOutBadge: badgeId }) });
-      steps.push({ step: "engagement linked to the card", ok: true });
+      // the CMS only links an engagement to an ACTIVE card: the back link follows when the card is switched on
+      try {
+        await stg(`/engagements/${engagementId}`, { method: "PATCH", body: JSON.stringify({ loggedOutBadge: badgeId }) });
+        steps.push({ step: "engagement linked to the card", ok: true });
+      } catch {
+        steps.push({ step: "engagement links back to the card once the card is switched on", ok: true });
+      }
     }
     let blockId: string | undefined;
     if (setup.module?.pageId) blockId = await placeModule(card, badgeId, engagementId, setup.module.pageId, steps).catch((e) => { steps.push({ step: "module not placed", ok: false, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) }); return undefined; });

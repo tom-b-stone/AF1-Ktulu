@@ -254,6 +254,9 @@ export async function applyChanges(changes: Change[], by: string): Promise<{ app
         if (f.localized) card.values[f.key] = { ...((card.values[f.key] as LocValue) ?? {}), [r.locale as Loc]: String(r.after) };
         else card.values[f.key] = r.after as string | boolean;
       }
+      // switched on: the engagement can now point back to the card (the CMS refuses that while disabled)
+      if (card.staging.badgeId && card.staging.engagementId && list.some((r) => r.key === "disabled" && r.after === false))
+        await stg(`/engagements/${card.staging.engagementId}`, { method: "PATCH", body: JSON.stringify({ loggedOutBadge: card.staging.badgeId }) }).then(() => pushed.push(`${card.id} engagement linked back to the card`)).catch(() => {});
       card.updatedAt = new Date().toISOString();
       card.log = [{ at: card.updatedAt, by, summary: `${list.length} change${list.length === 1 ? "" : "s"}: ${[...new Set(list.map((r) => r.label + (r.locale ? ` ${r.locale.toUpperCase()}` : "")))].join(", ")}` }, ...card.log].slice(0, 50);
     } catch (e) {
