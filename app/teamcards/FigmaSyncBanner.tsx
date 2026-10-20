@@ -47,7 +47,7 @@ export default function FigmaSyncBanner() {
   if (!toFigma && !fromFigma && !conflicts) return null;
   const figma = `https://www.figma.com/design/${s.campaign.figmaFile}/WorkingDoc?node-id=${s.campaign.figmaPage.replace(":", "-")}`;
   return (
-    <div role="status" style={{ position: "fixed", right: 24, bottom: 24, zIndex: 50, width: 320, padding: 14, borderRadius: 14, background: "var(--bg, #141313)", border: "1px solid var(--accent)", boxShadow: "0 12px 40px rgba(0,0,0,.35)", display: "grid", gap: 10, fontSize: 13 }}>
+    <div role="status" style={{ position: "fixed", left: 210, bottom: 24, zIndex: 50, width: 320, padding: 14, borderRadius: 14, background: "var(--bg, #141313)", border: "1px solid var(--accent)", boxShadow: "0 12px 40px rgba(0,0,0,.35)", display: "grid", gap: 10, fontSize: 13 }}>
       <strong>Figma isn&apos;t in sync</strong>
       <div style={{ color: "var(--muted)" }}>
         {toFigma > 0 && <div>{toFigma} change{toFigma === 1 ? "" : "s"} from the tool or the CMS {toFigma === 1 ? "is" : "are"} not in Figma yet. Open Figma and run AF1 Ktulu Sync. It applies them right away and stays live while it&apos;s open.</div>}

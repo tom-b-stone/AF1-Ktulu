@@ -511,7 +511,8 @@ export default function EditCard() {
         const meta: Json = row?.meta ?? {};
         const kindLabel = MECH[row?.mechanic ?? ""] ?? (kind === "qa" ? "text answer" : kind === "hot" ? "hot or not" : "multiple choice");
         const reward = REWARD[row?.rewardType ?? ""];
-        const campaign = meta.campaign || ""; // the Grand Prix is not the campaign
+        // the Grand Prix is not the campaign; tags read "são paulo 2026" → "São Paulo"
+        const campaign = (meta.campaign || "").replace(/\s*\b20\d\d\b\s*$/, "").trim().replace(/(^|\s)(\p{L})/gu, (m: string) => m.toUpperCase());
         const filledEn = allKeys.filter((k) => textOf(k, "en").trim()).length;
         const filledDe = allKeys.filter((k) => textOf(k, "de").trim()).length;
         const laneSteps = STEPS.filter((x) => x.lanes.length).map((x) => ({ x, ...stepCount(x.key) }));
@@ -553,7 +554,7 @@ export default function EditCard() {
         };
         const how = HOW[row?.mechanic ?? ""] ?? (kind === "qa" ? HOW["q-and-a"] : kind === "hot" ? HOW["hot-or-not"] : row?.mechanic ? HOW.survey : "");
         const earn = how
-          ? `Fans ${how}${placement ? ` (${placement.replace(/^[^·]*·\s*/, "")})` : ""}${question && !/^(page|link)$/.test(row?.mechanic ?? "") ? `: "${question.length > 110 ? question.slice(0, 110) + "…" : question}"` : ""}. ${reward ? `They get ${reward}.` : "No reward is set yet."}`
+          ? `Fans ${how}${placement ? ` on the ${placement.replace(/^[^·]*·\s*/, "").replace(/\s*\(\/[^)]*\)/g, "").trim()} page` : ""}${question && !/^(page|link)$/.test(row?.mechanic ?? "") ? `: "${question.length > 110 ? question.slice(0, 110) + "…" : question}"` : ""}. ${reward ? `They get ${reward}.` : "No reward is set yet."}`
           : "How fans earn this card is not defined yet.";
         const last = row?.log?.[0] ? `${row.log[0].summary} · ${new Date(row.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "No changes logged";
         const lbl: CSSProperties = { fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: C.mute };
@@ -927,7 +928,7 @@ function FieldBox({
                 onFocus={onFocus}
                 onChange={(e) => onChange(l, e.target.value)}
                 onBlur={() => onBlur(l)}
-                style={{ width: "100%", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 8, border: `1px solid ${bad ? "rgba(224,108,91,.7)" : miss ? "rgba(255,45,0,.45)" : C.line2}`, background: "#0f0f12", color: C.fg, fontFamily: "inherit" }}
+                style={{ width: "100%", minHeight: 0, height: "auto", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 8, border: `1px solid ${bad ? "rgba(224,108,91,.7)" : miss ? "rgba(255,45,0,.45)" : C.line2}`, background: "#0f0f12", color: C.fg, fontFamily: "inherit" }}
               />
               {(bad || focused) && (
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
