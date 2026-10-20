@@ -318,6 +318,18 @@ export default function EditCard() {
   const drawerKeys = focusStation ? keysIn(htmlOf(focusStation)).filter((k) => !k.startsWith("meta:")) : [];
   const whereUsed = (k: string) => [...new Set(stations.filter((s) => keysIn(htmlOf(s)).includes(k)).map((s) => s.label.replace(/, back$/, "")))];
   const missingDe = allKeys.filter((k) => textOf(k, "en").trim() && !textOf(k, "de").trim());
+  // jump to the screen that shows a field and open it in the drawer
+  const goTo = (k: string) => {
+    const st = stations.find((x) => keysIn(htmlOf(x)).includes(k));
+    const f = fieldByKey(k);
+    const target = st ? STEPS.find((x) => x.lanes.includes(st.lane)) : f && !f.localized ? STEPS.find((x) => x.key === "settings") : undefined;
+    if (!target) return;
+    setStep(target.key);
+    setWhole(false);
+    if (st) setStation(st.id);
+    setFocus(k);
+    if (st) setDrawer(true);
+  };
 
   // ---- render -------------------------------------------------------------
   const phone = (s: Station, l: Loc, tag?: string) => {
@@ -482,7 +494,7 @@ export default function EditCard() {
         const meta: Json = row?.meta ?? {};
         const kindLabel = MECH[row?.mechanic ?? ""] ?? (kind === "qa" ? "text answer" : kind === "hot" ? "hot or not" : "multiple choice");
         const reward = REWARD[row?.rewardType ?? ""];
-        const campaign = meta.campaign || row?.raceLabel || "";
+        const campaign = meta.campaign || ""; // the Grand Prix is not the campaign
         const filledEn = allKeys.filter((k) => textOf(k, "en").trim()).length;
         const filledDe = allKeys.filter((k) => textOf(k, "de").trim()).length;
         const laneSteps = STEPS.filter((x) => x.lanes.length).map((x) => ({ x, ...stepCount(x.key) }));
@@ -510,7 +522,8 @@ export default function EditCard() {
               ? { label: "Fix the setup in the CMS", why: "The missing items above are set in Payload, not in the texts.", go: "", de: false }
               : { label: "Walk through the journey", why: "Nothing urgent. Check the screens, then review and push to staging.", go: "page", de: false };
         const typeLabel = meta.type ?? card.badgeTypeLabel ?? "";
-        const where = [campaign, meta.race ?? row?.raceLabel, meta.partner].filter((x, i, arr) => x && arr.indexOf(x) === i).join(" · ");
+        const gp = meta.race ?? row?.raceLabel;
+        const where = [campaign ? `Campaign: ${campaign}` : "", gp ? `Grand Prix: ${gp}` : "", meta.partner ? `Partner: ${meta.partner}` : ""].filter(Boolean).join(" · ");
         const question = textOf("question", "en").trim();
         const about = textOf("description", "en").trim() || textOf("revealDescription", "en").trim();
         const placement: string = row?.placement ?? "";
@@ -541,7 +554,7 @@ export default function EditCard() {
                 </div>
                 <div style={{ display: "grid", gap: 4 }}>
                   <h2 style={{ margin: 0, fontSize: 26, lineHeight: 1.15, fontWeight: 700, letterSpacing: "-0.01em" }}>{card.name}</h2>
-                  <div style={{ fontSize: 13, color: where ? C.fg : C.mute, fontStyle: where ? undefined : "italic" }}>{where || "No campaign yet"}</div>
+                  <div style={{ fontSize: 13, color: where ? C.fg : C.mute, fontStyle: where ? undefined : "italic" }}>{where || "No campaign or Grand Prix yet"}</div>
                 </div>
                 <div style={{ display: "grid", gap: 4 }}>
                   <span style={lbl}>How to earn</span>
@@ -649,7 +662,7 @@ export default function EditCard() {
               <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ textAlign: "left", color: C.mute, fontSize: 11 }}>
-                    <th style={{ padding: 8 }}>Field</th>
+                    <th style={{ padding: 8 }}>Field · where</th>
                     <th style={{ padding: 8 }}>Before</th>
                     <th style={{ padding: 8 }}>After</th>
                   </tr>
@@ -658,8 +671,9 @@ export default function EditCard() {
                   {review.rows.map((r: Json, i: number) => (
                     <tr key={i} style={{ borderTop: `1px solid ${C.line}`, verticalAlign: "top" }}>
                       <td style={{ padding: 8 }}>
-                        {r.label}
+                        <button onClick={() => goTo(r.key)} style={{ all: "unset", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>{r.label}</button>
                         {r.locale ? ` · ${String(r.locale).toUpperCase()}` : ""}
+                        <div style={{ color: C.mute, fontSize: 11.5 }}>{whereUsed(r.key).join(" · ")}</div>
                         {r.issues?.length > 0 && <div style={{ color: "#e06c5b", fontSize: 12 }}>{r.issues.join(" · ")}</div>}
                       </td>
                       <td style={{ padding: 8, color: C.mute, whiteSpace: "pre-wrap" }}>{String(initial[r.key]?.[r.locale as Loc] ?? r.before ?? "")}</td>
@@ -681,25 +695,6 @@ export default function EditCard() {
                 </tbody>
               </table>
               {review.errors.length > 0 && <div style={{ color: "#e06c5b", fontSize: 13 }}>{review.errors.join(" · ")}</div>}
-              <Consistency
-                keys={[...new Set([...changed.map((c) => c.key).filter((k) => isText(fieldByKey(k))), ...CTA_KEYS])]}
-                mine={(k) => ({ en: textOf(k, "en"), de: textOf(k, "de") })}
-                others={others}
-                lex={lex}
-                cross={cross}
-                onUseLex={(k, e) => {
-                  setText(k, "en", e.en);
-                  if (e.de) setText(k, "de", e.de);
-                }}
-                onSync={(k, ids) =>
-                  setCross((c) => {
-                    const out = { ...c };
-                    for (const cid of ids)
-                      out[cid] = [...(out[cid] ?? []).filter((x) => x.key !== k), ...(["en", "de"] as Loc[]).filter((l) => textOf(k, l)).map((l) => ({ key: k, locale: l, value: textOf(k, l) }))];
-                    return out;
-                  })
-                }
-              />
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button style={{ ...btn(), background: C.lava, borderColor: C.lava, color: "#fff", fontWeight: 600, height: 38, padding: "0 18px" }} disabled={!!busy} onClick={() => void apply()}>
                   Apply to staging
@@ -707,6 +702,30 @@ export default function EditCard() {
                 <span style={{ fontSize: 12.5, color: C.mute }}>Writes the card, engagement and module on staging and republishes the page. Figma picks it up on its next sync.</span>
               </div>
             </>
+          )}
+          {card && (
+            <Consistency
+              keys={[...new Set([...BUTTONS, ...SAME_BY_TYPE, ...changed.map((c) => c.key).filter((k) => isText(fieldByKey(k)))])]}
+              mine={(k) => ({ en: textOf(k, "en"), de: textOf(k, "de") })}
+              me={{ mechanic: row?.mechanic, campaign: row ? campaignOfPeer(row) : undefined, type: row?.meta?.type }}
+              others={others as Peer[]}
+              where={whereUsed}
+              onGo={goTo}
+              lex={lex}
+              cross={cross}
+              onUseLex={(k, e) => {
+                setText(k, "en", e.en);
+                if (e.de) setText(k, "de", e.de);
+              }}
+              onSync={(k, ids) =>
+                setCross((c) => {
+                  const out = { ...c };
+                  for (const cid of ids)
+                    out[cid] = [...(out[cid] ?? []).filter((x) => x.key !== k), ...(["en", "de"] as Loc[]).filter((l) => textOf(k, l)).map((l) => ({ key: k, locale: l, value: textOf(k, l) }))];
+                  return out;
+                })
+              }
+            />
           )}
           {result && (
             <div style={{ display: "grid", gap: 6, fontSize: 13.5 }}>
@@ -917,68 +936,131 @@ function ScopeDialog({ ask, onClose, onNext }: { ask: Ask; onClose: () => void; 
 }
 
 // review summary: is this wording the same on every card? lexicon + other cards, grouped by wording
+// Review: are buttons and recurring texts worded the same where they do the
+// same thing? First the buttons of this card side by side, then every button
+// (and every changed text) compared with the cards that share something with
+// this one: the same campaign, the same engagement, the same card type.
+// Cards with nothing in common are not compared.
+type Peer = OtherCard & { mechanic?: string; raceLabel?: string; meta?: { campaign?: string; type?: string } };
+const BUTTONS = ["revealButton", "ctaLabel", "submitLabel"];
+const SAME_BY_TYPE = ["overlayTitle", "overlaySubtitle", "postTitle", "shareTitle"]; // the same job on every card of a kind
+const MECH_LABEL: Record<string, string> = { "q-and-a": "Q&A", survey: "Survey", "hot-or-not": "Hot or Not", page: "Page visit", link: "Link" };
+const campaignOfPeer = (c: { meta?: { campaign?: string } }) => c.meta?.campaign || ""; // a Grand Prix is not a campaign
+
 function Consistency({
-  keys, mine, others, lex, cross, onUseLex, onSync,
+  keys, mine, me, others, lex, cross, onUseLex, onSync, where, onGo,
 }: {
-  keys: string[]; mine: (k: string) => LV; others: OtherCard[]; lex: LexEntry[]; cross: Cross;
+  keys: string[]; mine: (k: string) => LV; where: (k: string) => string[]; onGo: (k: string) => void; me: { mechanic?: string; campaign?: string; type?: string }; others: Peer[]; lex: LexEntry[]; cross: Cross;
   onUseLex: (k: string, e: LexEntry) => void; onSync: (k: string, ids: string[]) => void;
 }) {
+  // each other card in the first scope it shares with this one
+  const scopes = [
+    { key: "campaign", title: me.campaign ? `This campaign · ${me.campaign}` : "", test: (o: Peer) => !!me.campaign && campaignOfPeer(o) === me.campaign },
+    { key: "engagement", title: me.mechanic ? `Same engagement · ${MECH_LABEL[me.mechanic] ?? me.mechanic}` : "", test: (o: Peer) => !!me.mechanic && o.mechanic === me.mechanic },
+    { key: "type", title: me.type ? `Same card type · ${me.type}` : "", test: (o: Peer) => !!me.type && o.meta?.type === me.type },
+  ].filter((x) => x.title);
+  const scopeOf = (o: Peer) => scopes.find((x) => x.test(o))?.key;
+  const peers = others.filter((o) => scopeOf(o));
+  const val = (o: OtherCard, k: string) => {
+    const v = o.values[k];
+    return v && typeof v === "object" ? { en: String(v.en ?? ""), de: String(v.de ?? "") } : { en: "", de: "" };
+  };
+
+  // buttons of this card
+  const mineButtons = BUTTONS.map((k) => ({ k, v: mine(k), f: fieldByKey(k) })).filter((b) => b.v.en.trim() || b.v.de.trim());
+  const dupe = (k: string, en: string) => !!en.trim() && mineButtons.some((b) => b.k !== k && norm(b.v.en) === norm(en));
+
   const blocks = keys
     .map((k) => {
       const my = mine(k);
-      const val = (o: OtherCard) => {
-        const v = o.values[k];
-        return v && typeof v === "object" ? { en: String(v.en ?? ""), de: String(v.de ?? "") } : { en: "", de: "" };
-      };
-      const groups = new Map<string, { en: string; de: string; cards: OtherCard[] }>();
-      for (const o of others) {
-        const v = val(o);
-        if (!v.en.trim()) continue;
-        if (!CTA_KEYS.includes(k) && !similar(v.en, my.en)) continue; // texts: only similar expressions; CTAs: every wording
-        const g = groups.get(norm(v.en)) ?? { ...v, cards: [] };
-        g.cards.push(o);
-        groups.set(norm(v.en), g);
-      }
-      const differ = [...groups.values()].filter((g) => norm(g.en) !== norm(my.en) || norm(g.de) !== norm(my.de)).sort((a, b) => b.cards.length - a.cards.length);
-      const same = [...groups.values()].filter((g) => norm(g.en) === norm(my.en) && norm(g.de) === norm(my.de)).reduce((n, g) => n + g.cards.length, 0);
+      const rows = scopes.map((sc) => {
+        const groups = new Map<string, { en: string; de: string; cards: Peer[] }>();
+        let same = 0;
+        for (const o of peers.filter((o) => scopeOf(o) === sc.key)) {
+          const v = val(o, k);
+          if (!v.en.trim()) continue;
+          const exact = BUTTONS.includes(k) || SAME_BY_TYPE.includes(k);
+          if (!exact && !similar(v.en, my.en)) continue; // free texts: only similar wording counts
+          if (norm(v.en) === norm(my.en) && norm(v.de) === norm(my.de)) { same++; continue; }
+          const g = groups.get(norm(v.en) + "|" + norm(v.de)) ?? { ...v, cards: [] };
+          g.cards.push(o);
+          groups.set(norm(v.en) + "|" + norm(v.de), g);
+        }
+        return { sc, same, differ: [...groups.values()].sort((a, b) => b.cards.length - a.cards.length) };
+      }).filter((r) => r.same || r.differ.length);
       const lx = lex.filter((e) => e.field === k && norm(e.en) !== norm(my.en)).sort((a, b) => Number(b.saved) - Number(a.saved) || b.uses - a.uses).slice(0, 3);
-      return { k, my, differ, same, lx };
+      return { k, my, rows, lx, open: rows.some((r) => r.differ.length) };
     })
-    .filter((b) => b.my.en.trim() && (b.differ.length || b.lx.length));
-  if (!blocks.length) return null;
+    .filter((b) => b.my.en.trim() && (b.rows.length || b.lx.length))
+    .sort((a, b) => Number(b.open) - Number(a.open));
+
+  const cell: CSSProperties = { padding: "7px 10px", fontSize: 12.5, borderTop: `1px solid ${C.line}`, verticalAlign: "top" };
   return (
-    <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
+    <div style={{ display: "grid", gap: 12, marginTop: 6 }}>
       <div>
-        <div style={{ fontSize: 15, fontWeight: 650 }}>Same wording on every card?</div>
-        <div style={{ fontSize: 12.5, color: C.mute }}>Similar texts and every button label on the other cards, plus approved phrasings from the lexicon. Sync them so the same content and function reads the same everywhere.</div>
+        <div style={{ fontSize: 15, fontWeight: 650 }}>Same wording where it does the same thing?</div>
+        <div style={{ fontSize: 12.5, color: C.mute }}>
+          Buttons and recurring texts compared with the cards that share something with this one: {scopes.map((x) => x.title.split(" · ")[0].toLowerCase()).join(", ") || "none"}. Other cards are left out. {peers.length} card{peers.length === 1 ? "" : "s"} compared.
+        </div>
       </div>
+
+      {mineButtons.length > 0 && (
+        <section aria-label="Buttons in this card" style={{ border: `1px solid ${C.line}`, borderRadius: 12, background: "#141417", overflow: "hidden" }}>
+          <div style={{ padding: "10px 12px 6px", fontSize: 13, fontWeight: 600 }}>Buttons in this card</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <tbody>
+              {mineButtons.map((b) => (
+                <tr key={b.k}>
+                  <td style={{ ...cell, color: C.mute, width: 190 }}>
+                    <button onClick={() => onGo(b.k)} style={{ all: "unset", cursor: "pointer", color: C.fg, textDecoration: "underline", textUnderlineOffset: 3 }}>{b.f?.label ?? b.k}</button>
+                    <div style={{ fontSize: 11 }}>{where(b.k).join(" · ") || b.f?.step}</div>
+                  </td>
+                  <td style={cell}>{b.v.en || <span style={{ color: "#e06c5b" }}>EN missing</span>}</td>
+                  <td style={cell}>{b.v.de || <span style={{ color: "#e06c5b" }}>DE missing</span>}</td>
+                  <td style={{ ...cell, color: dupe(b.k, b.v.en) ? "#ffb5a6" : C.mute, width: 200 }}>{dupe(b.k, b.v.en) ? "Same label as another button: does it do the same?" : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       {blocks.map((b) => (
-        <div key={b.k} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, display: "grid", gap: 8, background: "#141417" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>
+        <div key={b.k} style={{ border: `1px solid ${b.open ? "rgba(227,62,26,.35)" : C.line}`, borderRadius: 12, padding: 12, display: "grid", gap: 8, background: "#141417" }}>
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, minWidth: 0 }}>
               {labelOf(b.k)}
               <span style={{ color: C.mute, fontWeight: 400 }}> · this card: “{b.my.en}”{b.my.de ? ` / “${b.my.de}”` : ""}</span>
+              <div style={{ fontSize: 11.5, color: C.mute, fontWeight: 400, marginTop: 2 }}>Shown on: {where(b.k).join(" · ") || "not on a screen of this journey"}</div>
             </div>
-            {b.same > 0 && <span style={{ fontSize: 11.5, color: C.ok }}>same on {b.same} card{b.same === 1 ? "" : "s"}</span>}
+            <button style={{ ...btn(), height: 28, fontSize: 12, flexShrink: 0 }} onClick={() => onGo(b.k)}>Edit on this card</button>
           </div>
-          {b.differ.map((g) => {
-            const ids = g.cards.map((c) => c.id);
-            const done = ids.every((id) => (cross[id] ?? []).some((x) => x.key === b.k));
-            return (
-              <div key={g.en} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", fontSize: 12.5, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
-                <span style={{ minWidth: 0 }}>
-                  “{g.en}”{g.de ? <span style={{ color: C.mute }}> / “{g.de}”</span> : null}
-                  <span style={{ display: "block", fontSize: 11, color: C.mute }}>
-                    {g.cards.length} card{g.cards.length === 1 ? "" : "s"}: {g.cards.slice(0, 6).map((c) => c.name).join(", ")}
-                    {g.cards.length > 6 ? ` +${g.cards.length - 6}` : ""}
-                  </span>
-                </span>
-                <button style={{ ...btn(done), flexShrink: 0 }} disabled={done} onClick={() => onSync(b.k, ids)}>
-                  {done ? "Will be synced" : `Use this card's wording on ${ids.length}`}
-                </button>
+          {b.rows.map(({ sc, same, differ }) => (
+            <div key={sc.key} style={{ display: "grid", gap: 6, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
+              <div style={{ display: "flex", gap: 10, justifyContent: "space-between", fontSize: 11.5 }}>
+                <span style={{ color: C.mute, textTransform: "uppercase", letterSpacing: ".08em" }}>{sc.title}</span>
+                {same > 0 && <span style={{ color: C.ok }}>same on {same} card{same === 1 ? "" : "s"}</span>}
               </div>
-            );
-          })}
+              {differ.map((g) => {
+                const ids = g.cards.map((c) => c.id);
+                const done = ids.every((id) => (cross[id] ?? []).some((x) => x.key === b.k));
+                return (
+                  <div key={g.en + g.de} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", fontSize: 12.5 }}>
+                    <span style={{ minWidth: 0 }}>
+                      “{g.en}”{g.de ? <span style={{ color: C.mute }}> / “{g.de}”</span> : <span style={{ color: "#e06c5b" }}> / DE missing</span>}
+                      <span style={{ display: "block", fontSize: 11, color: C.mute }}>
+                        {g.cards.slice(0, 5).map((c) => c.name).join(", ")}
+                        {g.cards.length > 5 ? ` +${g.cards.length - 5}` : ""}
+                      </span>
+                    </span>
+                    <button style={{ ...btn(done), flexShrink: 0 }} disabled={done} onClick={() => onSync(b.k, ids)}>
+                      {done ? "Will be synced" : `Use this card's wording on ${ids.length}`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
           {b.lx.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
               <span style={{ fontSize: 11, color: C.mute, alignSelf: "center" }}>Lexicon:</span>
@@ -992,6 +1074,7 @@ function Consistency({
           )}
         </div>
       ))}
+      {!blocks.length && <div style={{ fontSize: 12.5, color: C.ok }}>Buttons and recurring texts match the related cards.</div>}
     </div>
   );
 }

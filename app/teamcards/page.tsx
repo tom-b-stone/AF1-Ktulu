@@ -34,7 +34,9 @@ const MECH: Record<string, string> = { "q-and-a": "Q&A", survey: "Survey", "hot-
 const REWARD: Record<string, string> = { noReward: "No reward", raffleSignup: "Raffle", couponCode: "Voucher" };
 const PREFIX: Record<string, string> = { SIN: "Unlock Singapore" };
 
-const campaignOf = (c: Row) => c.meta.campaign || PREFIX[c.id.split("-")[0]] || (c.raceLabel ? `${c.raceLabel}` : "No campaign");
+// a campaign (e.g. Unlock Singapore) is its own thing; the Grand Prix of a card is not its campaign
+const campaignOf = (c: Row) => c.meta.campaign || PREFIX[c.id.split("-")[0]] || "No campaign";
+const gpOf = (c: Row) => c.meta.race || c.raceLabel || "No Grand Prix";
 const typeOf = (c: Row) => c.meta.type || (c.meta.core ? "Core" : "Unknown type");
 const QUICK_TONE: Record<Row["check"]["quick"], { bg: string; fg: string; label: string }> = {
   Ready: { bg: "rgba(46,125,79,0.18)", fg: "#7fd6a2", label: "Ready" },
@@ -80,9 +82,11 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [fCampaign, setFCampaign] = useState(ALL);
+  const [fGp, setFGp] = useState(ALL);
   const [fType, setFType] = useState(ALL);
   const [fQuick, setFQuick] = useState(ALL);
   const [replacing, setReplacing] = useState(false);
+  const [sel, setSel] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!replacing) return;
     const k = (e: KeyboardEvent) => e.key === "Escape" && setReplacing(false);
@@ -108,20 +112,21 @@ export default function Page() {
 
   const opts = useMemo(() => {
     const u = (f: (c: Row) => string) => [...new Set((cards ?? []).map(f))].sort();
-    return { campaign: u(campaignOf), type: u(typeOf), quick: ["Ready", "Missing", "Disabled"] };
+    return { campaign: u(campaignOf), gp: u(gpOf), type: u(typeOf), quick: ["Ready", "Missing", "Disabled"] };
   }, [cards]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (cards ?? []).filter((c) => {
       if (fCampaign && campaignOf(c) !== fCampaign) return false;
+      if (fGp && gpOf(c) !== fGp) return false;
       if (fType && typeOf(c) !== fType) return false;
       if (fQuick && c.check.quick !== fQuick) return false;
       if (!needle) return true;
       const hay = [c.name, c.id, campaignOf(c), typeOf(c), c.meta.partner, c.meta.race, MECH[c.mechanic ?? ""], REWARD[c.rewardType ?? ""], ...c.check.missing].join(" ").toLowerCase();
       return hay.includes(needle);
     });
-  }, [cards, q, fCampaign, fType, fQuick]);
+  }, [cards, q, fCampaign, fGp, fType, fQuick]);
 
   const summary = useMemo(() => {
     const list = cards ?? [];
@@ -140,15 +145,26 @@ export default function Page() {
     };
   }, [cards]);
 
-  const filtered = !!(q || fCampaign || fType || fQuick);
+  const filtered = !!(q || fCampaign || fGp || fType || fQuick);
   const reset = () => {
     setQ("");
     setFCampaign(ALL);
+    setFGp(ALL);
     setFType(ALL);
     setFQuick(ALL);
   };
 
+  const shownIds = shown.map((c) => c.id);
+  const allSel = shownIds.length > 0 && shownIds.every((id) => sel.has(id));
+  const toggle = (id: string) => setSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
   const columns: TableColumn<Row>[] = [
+    {
+      key: "sel",
+      header: <input type="checkbox" aria-label="Select all shown cards" checked={allSel} onPointerDown={stop} onClick={stop} onChange={() => setSel(allSel ? new Set([...sel].filter((id) => !shownIds.includes(id))) : new Set([...sel, ...shownIds]))} />,
+      width: "40px",
+      cell: (c) => <input type="checkbox" aria-label={`Select ${c.name}`} checked={sel.has(c.id)} onPointerDown={stop} onClick={stop} onChange={() => toggle(c.id)} />,
+    },
     // eslint-disable-next-line @next/next/no-img-element
     { key: "img", header: "", width: "56px", cell: (c) => <img src={c.imageUrl || cardTemplate(c.name)} alt={c.imageUrl ? "" : "Card image not defined yet"} title={c.imageUrl ? undefined : "Card image not defined yet (template)"} style={{ width: 36, aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 4, display: "block" }} /> },
     {
@@ -206,14 +222,23 @@ export default function Page() {
     {
       key: "campaign",
       header: "Campaign",
-      width: "220px",
+      width: "200px",
       sortable: true,
       sortValue: (c) => campaignOf(c),
       headerExtra: <HeaderSelect label="campaign" value={fCampaign} options={opts.campaign} onChange={setFCampaign} />,
+      cell: (c) => <span style={{ fontSize: 12, color: campaignOf(c) === "No campaign" ? "var(--muted)" : undefined }}>{campaignOf(c)}</span>,
+    },
+    {
+      key: "gp",
+      header: "Grand Prix",
+      width: "200px",
+      sortable: true,
+      sortValue: (c) => gpOf(c),
+      headerExtra: <HeaderSelect label="Grand Prix" value={fGp} options={opts.gp} onChange={setFGp} />,
       cell: (c) => (
         <div style={{ fontSize: 12 }}>
-          <div>{campaignOf(c)}</div>
-          <div style={{ color: "var(--muted)" }}>{[c.meta.race ?? c.raceLabel, c.meta.partner].filter(Boolean).join(" · ")}</div>
+          <div style={{ color: gpOf(c) === "No Grand Prix" ? "var(--muted)" : undefined }}>{gpOf(c)}</div>
+          {c.meta.partner && <div style={{ color: "var(--muted)" }}>{c.meta.partner}</div>}
         </div>
       ),
     },
@@ -270,6 +295,7 @@ export default function Page() {
               Replace…
             </button>
           </div>
+          {sel.size > 0 && <BulkBar ids={[...sel]} cards={cards} onClear={() => setSel(new Set())} onDone={() => void load()} />}
           <div className="beui beui-compact">
             <Table<Row>
               data={shown}
@@ -296,6 +322,82 @@ export default function Page() {
           </div>,
           document.body,
         )}
+    </div>
+  );
+}
+
+// Actions on several cards at once: enable / disable, card type. Asks before
+// it writes; changes go to staging (cards not on staging yet: Ktulu only).
+function BulkBar({ ids, cards, onClear, onDone }: { ids: string[]; cards: Row[]; onClear: () => void; onDone: () => void }) {
+  const [types, setTypes] = useState<{ id: string; title: string }[] | null>(null);
+  const [type, setType] = useState("");
+  const [ask, setAsk] = useState<null | { label: string; run: () => Promise<{ text: string; err?: boolean }> }>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
+  useEffect(() => {
+    fetch("/api/teamcards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "types" }) })
+      .then((r) => r.json())
+      .then((j) => setTypes(j.types ?? []))
+      .catch(() => setTypes([]));
+  }, []);
+  const n = ids.length;
+  const offStaging = ids.filter((id) => !cards.find((c) => c.id === id)?.links.badge).length;
+  const post = (body: unknown) => fetch("/api/teamcards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+  const setDisabled = (on: boolean) =>
+    setAsk({
+      label: `${on ? "Disable" : "Enable"} ${n} card${n === 1 ? "" : "s"}${on ? " (they lose the link to engagement and module)" : ""}?`,
+      run: async () => {
+        const j = await post({ action: "apply", changes: ids.map((card) => ({ card, key: "disabled", value: on })) });
+        const errs: string[] = j.errors ?? (j.error ? [j.error] : []);
+        return { text: `${on ? "Disabled" : "Enabled"} ${n - errs.length} of ${n}.${errs.length ? " " + errs.join(" · ") : ""}`, err: errs.length > 0 };
+      },
+    });
+  const setTypeAll = () => {
+    const t = types?.find((x) => x.id === type);
+    if (!t) return;
+    setAsk({
+      label: `Set the card type of ${n} card${n === 1 ? "" : "s"} to ${t.title}?`,
+      run: async () => {
+        const j = await post({ action: "set-type", ids, type: t });
+        const errs: string[] = j.errors ?? (j.error ? [j.error] : []);
+        return { text: `${t.title} set on ${j.done?.length ?? 0} of ${n}.${errs.length ? " " + errs.join(" · ") : ""}`, err: errs.length > 0 };
+      },
+    });
+  };
+  async function go() {
+    if (!ask) return;
+    setBusy(true);
+    const r = await ask.run().catch((e) => ({ text: e instanceof Error ? e.message : "failed", err: true }));
+    setBusy(false);
+    setAsk(null);
+    setMsg(r);
+    onDone();
+  }
+  return (
+    <div role="region" aria-label="Bulk actions" style={{ position: "sticky", top: 8, zIndex: 5, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 12px", borderRadius: 10, border: "1px solid var(--accent)", background: "var(--bg-2)", boxShadow: "0 12px 30px -18px rgba(0,0,0,.8)" }}>
+      <b style={{ fontSize: 13, fontVariantNumeric: "tabular-nums" }}>{n} selected</b>
+      {!ask ? (
+        <>
+          <button className="btn" onClick={() => setDisabled(true)}>Disable</button>
+          <button className="btn" onClick={() => setDisabled(false)}>Enable</button>
+          <span style={{ width: 1, height: 22, background: "var(--border)" }} />
+          <select className="input" style={{ width: "auto", padding: "5px 8px" }} value={type} onChange={(e) => setType(e.target.value)} aria-label="Card type">
+            <option value="">{types ? "Card type …" : "Loading types …"}</option>
+            {(types ?? []).map((t) => (
+              <option key={t.id} value={t.id}>{t.title}</option>
+            ))}
+          </select>
+          <button className="btn" disabled={!type} onClick={setTypeAll}>Set type</button>
+          <button className="btn" style={{ marginLeft: "auto" }} onClick={onClear}>Clear selection</button>
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: 13 }}>{ask.label}{offStaging ? ` ${offStaging} not on staging yet: changed in Ktulu only.` : " Written to staging."}</span>
+          <button className="btn btn-primary" disabled={busy} onClick={() => void go()}>{busy ? "Working …" : "Yes, do it"}</button>
+          <button className="btn" disabled={busy} onClick={() => setAsk(null)}>Cancel</button>
+        </>
+      )}
+      {msg && !ask && <span style={{ flexBasis: "100%", fontSize: 12, color: msg.err ? "#ff9a84" : "#7fd6a2" }}>{msg.text}</span>}
     </div>
   );
 }

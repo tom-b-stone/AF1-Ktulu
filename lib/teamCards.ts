@@ -375,3 +375,39 @@ export function cardCheck(c: CardRecord, meta?: CardMeta): CardCheck {
   }
   return { missing, quick: missing.length ? "Missing" : "Ready" };
 }
+
+// ---- bulk: card type ----------------------------------------------------------
+// The card types in use on staging (badgeType relation), so the overview can
+// offer them without knowing the tag collection.
+export async function badgeTypes(): Promise<{ id: string; title: string }[]> {
+  const r = await stg(`/badges?limit=300&depth=1&locale=en&draft=true`).catch(() => ({ docs: [] }));
+  const out = new Map<string, string>();
+  for (const b of (r.docs ?? []) as Json[]) {
+    const t = b.badgeType;
+    if (t && typeof t === "object" && t.id) out.set(String(t.id), tagTitle(t) ?? String(t.id));
+  }
+  return [...out].map(([id, title]) => ({ id, title })).sort((a, b) => a.title.localeCompare(b.title));
+}
+
+// Sets the card type on several cards: the badge on staging, and the tracker
+// briefing for cards that are not on staging yet.
+export async function setCardType(ids: string[], type: { id: string; title: string }, by: string) {
+  const cards = await listCards();
+  const done: string[] = [];
+  const errors: string[] = [];
+  for (const id of ids) {
+    const card = cards.find((c) => c.id === id);
+    if (!card) { errors.push(`Unknown card ${id}`); continue; }
+    try {
+      if (card.staging.badgeId) await stg(`/badges/${card.staging.badgeId}`, { method: "PATCH", body: JSON.stringify({ badgeType: type.id }) });
+      card.brief = { ...(card.brief ?? {}), badgeType: type.title };
+      card.updatedAt = new Date().toISOString();
+      card.log = [{ at: card.updatedAt, by, summary: `Card type: ${type.title}${card.staging.badgeId ? "" : " (not on staging yet)"}` }, ...card.log].slice(0, 50);
+      done.push(id);
+    } catch (e) {
+      errors.push(`${id}: ${e instanceof Error ? e.message : "failed"}`);
+    }
+  }
+  await saveCards(cards);
+  return { done, errors };
+}
