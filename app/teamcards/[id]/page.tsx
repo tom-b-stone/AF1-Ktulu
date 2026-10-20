@@ -98,6 +98,17 @@ export default function EditCard() {
   const [vals, setVals] = useState<Values>({});
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState("overview");
+  // guided setup: index into GUIDE, null when editing freely (?guided=1 starts it)
+  const [guide, setGuide] = useState<number | null>(null);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("guided")) setGuide(0);
+  }, []);
+  useEffect(() => {
+    if (guide === null) return;
+    setStep(GUIDE[guide].step);
+    setWhole(false);
+    setStation(undefined);
+  }, [guide]);
   const [whole, setWhole] = useState(false);
   const [mode, setMode] = useState<Mode>("en");
   const [scale, setScale] = useState(0.62);
@@ -445,6 +456,38 @@ export default function EditCard() {
             );
           })}
         </nav>
+        {guide !== null && (
+          <div role="region" aria-label="Guided setup" style={{ margin: "0 24px 10px", padding: "10px 14px", borderRadius: 12, border: `1px solid rgba(255,45,0,.45)`, background: "rgba(255,45,0,.06)", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 2, flex: "1 1 360px", minWidth: 0 }}>
+              <span style={{ fontSize: 11.5, color: C.mute }}>
+                Guided setup · step {guide + 2} of {GUIDE.length + 1}
+              </span>
+              <span style={{ fontSize: 14 }}>
+                <b>{GUIDE[guide].title}.</b> <span style={{ color: "#cfcdcc" }}>{GUIDE[guide].todo}</span>
+              </span>
+            </div>
+            <div aria-hidden style={{ display: "flex", gap: 3 }}>
+              {GUIDE.map((_, i) => (
+                <span key={i} style={{ width: 14, height: 4, borderRadius: 2, background: i <= guide ? C.lava : C.line2 }} />
+              ))}
+            </div>
+            <button style={btn()} disabled={guide === 0} onClick={() => setGuide(guide - 1)}>
+              Back
+            </button>
+            {guide < GUIDE.length - 1 ? (
+              <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => setGuide(guide + 1)}>
+                Next: {GUIDE[guide + 1].title} <Icon d={I.right} size={14} />
+              </button>
+            ) : (
+              <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => setGuide(null)}>
+                Finish the guide
+              </button>
+            )}
+            <button onClick={() => setGuide(null)} style={{ all: "unset", cursor: "pointer", fontSize: 12, color: C.mute, textDecoration: "underline" }}>
+              Leave the guide
+            </button>
+          </div>
+        )}
       </div>
 
       {draft && (
@@ -638,6 +681,9 @@ export default function EditCard() {
                   {next.label} <Icon d={I.right} size={14} />
                 </button>
                 <span style={{ fontSize: 12.5, color: C.mute }}>{next.why}</span>
+                <button onClick={() => setGuide(0)} style={{ ...btn(), marginLeft: "auto" }} title="Walk through card, engagement, module, reward and all texts, one step at a time">
+                  Guided setup
+                </button>
               </div>
               {(!card.links.badge || prod || (row?.brief?.builtOnStaging ?? (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary)))) && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -665,6 +711,7 @@ export default function EditCard() {
       {step === "setup" && (
         <div style={{ padding: "22px 24px" }}>
           <SetupStep
+            only={guide !== null ? GUIDE[guide].section : undefined}
             cardId={card.id}
             cardName={card.name}
             imageUrl={card.imageUrl}
@@ -877,6 +924,21 @@ export default function EditCard() {
     </div>
   );
 }
+
+// The guided setup: the same steps as the editor, one at a time, in the order a
+// new card needs them. Step 1 (name, type, campaign) is on /teamcards/new.
+const GUIDE: { step: string; section?: number; title: string; todo: string }[] = [
+  { step: "setup", section: 0, title: "Card", todo: "Card type, Grand Prix and campaign, the front image and the back image." },
+  { step: "setup", section: 1, title: "Engagement", todo: "How fans earn the card: a page visit, or a task like Hot or Not, survey, quiz or Q&A with its items." },
+  { step: "setup", section: 2, title: "Module", todo: "The staging page the card sits on. The module with the task is placed there." },
+  { step: "setup", section: 3, title: "Reward", todo: "What fans get when they collect the card." },
+  { step: "setup", section: 4, title: "Status", todo: "Leave the card disabled until everything is checked." },
+  { step: "page", title: "Texts on the page", todo: "The module texts and the task. Tap a text on a screen to write it in the panel on the right." },
+  { step: "out", title: "Texts when logged out", todo: "What visitors see before they log in or register." },
+  { step: "in", title: "Texts when logged in", todo: "After the task: the answer, the confirmation and the collected card." },
+  { step: "collection", title: "Texts in the collection", todo: "The card before and after it is collected, front and back." },
+  { step: "review", title: "Review and build", todo: "Check every text against the rules, then build the card on staging. It stays disabled." },
+];
 
 // one field in the drawer: label, what it is, EN + DE, counters, rules (lexicon + other cards: in the review)
 function FieldBox({

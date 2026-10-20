@@ -65,27 +65,26 @@ export function stationsFor(kind: TemplateKind): Station[] {
   return [...task, ...out, ...inn, ...col];
 }
 
-// field hints: "what" is shown to people in the text panel; "rules" are copy rules for
-// Claude and the copy check only, never shown in the tool
-export const HINTS: Record<string, { what: string; rules?: string[] }> = {
-  modCategory: { what: "Small line above the module headline.", rules: ["Usually the race, e.g. R17 | Singapore GP"] },
-  modHeadline: { what: "Headline of the module on the page.", rules: ["Sentence case", "No exclamation marks on the website"] },
+// field hints: what a field is, shown in the text panel. The writing rules live in
+// Team Cards → Lexicon (lib/teamCardRules), for Claude and the copy check.
+export const HINTS: Record<string, { what: string }> = {
+  modCategory: { what: "Small line above the module headline." },
+  modHeadline: { what: "Headline of the module on the page." },
   modSubline: { what: "Text under the module headline." },
   modCopy: { what: "Longer text in the module, under the headline." },
   question: { what: "The task: what fans answer or rate." },
-  submitLabel: { what: "Button that sends the answer.", rules: ["Short verb first, no arrow"] },
-  overlayTitle: { what: "Overlay after answering while logged out.", rules: ["One short sentence"] },
+  submitLabel: { what: "Button that sends the answer." },
+  overlayTitle: { what: "Overlay after answering while logged out." },
   overlaySubtitle: { what: "Line under the overlay title: why logging in is worth it." },
   postTitle: { what: "Title after answering while logged in." },
   postMessage: { what: "Message after answering while logged in (on a quiz: the right answer)." },
-  revealTitle: { what: "Title of the card popup for logged-out visitors.", rules: ["Say Team Card, never badge"] },
+  revealTitle: { what: "Title of the card popup for logged-out visitors." },
   revealDescription: { what: "Text on the logged-out card popup." },
-  revealButton: { what: "Button on the logged-out card popup.", rules: ["CTAs without arrows", "Never \"sign up\""] },
-  badgePopupTitle: { what: "Title of the popup when the card is collected.", rules: ["Max 6 words"] },
-  rewardDescription: { what: "What the fan got. Front of the collected card.", rules: ["Max 20 words"] },
-  rewardTeaser: { what: "How to get the card. Front of the card before it is collected.", rules: ["Max 20 words"] },
-  description: { what: "Back of the card (all states).", rules: ["One line, doesn't repeat the title"] },
+  revealButton: { what: "Button on the logged-out card popup." },
+  badgePopupTitle: { what: "Title of the popup when the card is collected." },
+  rewardDescription: { what: "What the fan got. Front of the collected card." },
+  rewardTeaser: { what: "How to get the card. Front of the card before it is collected." },
+  description: { what: "Back of the card (all states)." },
   publicTitle: { what: "Name of the card in the collection." },
-  ctaLabel: { what: "Button on the card before it is collected, goes to the activation.", rules: ["CTAs without arrows"] },
+  ctaLabel: { what: "Button on the card before it is collected, goes to the activation." },
 };
-export const TEAM_RULES = ["Audi Revolut F1® Team, always with ®, never shortened", "Team Card, never Badge or Card alone", "No em dash, no exclamation marks, no \"amazing\" or \"incredible\"", "DE headlines end with a period"];

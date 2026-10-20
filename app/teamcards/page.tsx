@@ -249,8 +249,13 @@ export default function Page() {
   const chip = { padding: "3px 10px", fontSize: 12, borderRadius: 999 } as const;
   return (
     <div style={{ display: "grid", gap: 24, maxWidth: 1600 }}>
-      <header style={{ display: "grid", gap: 6, maxWidth: 760 }}>
-        <h1 style={{ margin: 0 }}>Team Cards</h1>
+      <header style={{ display: "grid", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h1 style={{ margin: 0, flex: 1 }}>Team Cards</h1>
+          <Link className="btn btn-primary" href="/teamcards/new" style={{ height: 36 }}>
+            New Team Card
+          </Link>
+        </div>
         <p style={{ color: "var(--muted)", margin: 0, fontSize: 14, lineHeight: 1.5 }}>Every card with its texts, journey and staging links. Open a card to edit it step by step in the real frontend views.</p>
       </header>
 

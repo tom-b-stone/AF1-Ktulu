@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { listCampaigns } from "@/lib/sitemapSync";
-import { applyChanges, badgeTypes, cardCheck, cardMeta, diff, listCards, setCardType, stagingLinks, type Change } from "@/lib/teamCards";
+import { applyChanges, badgeTypes, cardCheck, cardMeta, diff, listCards, setCardType, stagingLinks, type Change, createCard } from "@/lib/teamCards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,6 +34,13 @@ export async function POST(req: NextRequest) {
   try {
     // { action: "types" } → card types in use · { action: "set-type", ids, type } → set on several cards
     if (b?.action === "types") return NextResponse.json({ types: await badgeTypes() });
+    // { action: "new", name, badgeType?, campaign?, race? } → a new card, set up step by step
+    if (b?.action === "new") {
+      const n = b as unknown as { name?: string; badgeType?: string; campaign?: string; race?: string };
+      const card = await createCard({ name: n.name ?? "", badgeType: n.badgeType, campaign: n.campaign, race: n.race }, session.user.email);
+      console.log(`[teamcards] ${session.user.email} created ${card.id}`);
+      return NextResponse.json({ card });
+    }
     if (b?.action === "set-type") {
       if (!b.type?.id || !b.ids?.length) return NextResponse.json({ error: "cards and type required" }, { status: 400 });
       const r = await setCardType(b.ids, b.type, session.user.email);

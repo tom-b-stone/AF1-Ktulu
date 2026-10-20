@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { kvGet, kvSet } from "@/lib/kv";
+import { addRule, listRules, removeRule, updateRule } from "@/lib/teamCardRules";
 
 // Team Card lexicon: approved wordings (EN + DE) per field, learned from what
 // gets applied and from what people save on purpose. Hints in the editor use it.
@@ -14,7 +15,8 @@ const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  return NextResponse.json({ entries: await load() });
+  const [entries, rules] = await Promise.all([load(), listRules()]);
+  return NextResponse.json({ entries, rules });
 }
 
 // { action: "save", field, en, de, note }      → saved on purpose
@@ -24,7 +26,15 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const by = session.user.email;
-  const b = (await req.json().catch(() => null)) as { action?: string; field?: string; en?: string; de?: string; note?: string; id?: string; items?: { field: string; en: string; de: string; card: string }[] } | null;
+  const b = (await req.json().catch(() => null)) as { action?: string; field?: string; en?: string; de?: string; note?: string; id?: string; text?: string; items?: { field: string; en: string; de: string; card: string }[] } | null;
+  // rules: { action: "rule-add", text, field? } · { action: "rule-update", id, text, field? } · { action: "rule-remove", id }
+  try {
+    if (b?.action === "rule-add") return NextResponse.json({ rules: await addRule(b.text ?? "", b.field, by) });
+    if (b?.action === "rule-update" && b.id) return NextResponse.json({ rules: await updateRule(b.id, b.text ?? "", b.field, by) });
+    if (b?.action === "rule-remove" && b.id) return NextResponse.json({ rules: await removeRule(b.id) });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "failed" }, { status: 400 });
+  }
   const list = await load();
   const upsert = (field: string, en: string, de: string, card: string | null, saved: boolean, note?: string) => {
     if (!en.trim() && !de.trim()) return;

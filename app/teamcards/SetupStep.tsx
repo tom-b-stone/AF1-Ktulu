@@ -2,14 +2,16 @@
 
 // Setup step of the Team Card editor: everything a card needs beyond its
 // texts, as five short sections that fold away once done:
-//   1 The card        type, Grand Prix, campaign, front and back image
-//   2 How to earn it  page visit, Hot or Not, survey, quiz or Q&A, with its items and background
-//   3 Where it sits   the staging page that gets the module
-//   4 What fans get   reward type
-//   5 Live or not     active / disabled
+//   1 Card        type, Grand Prix, campaign, front and back image
+//   2 Engagement  how fans earn it: page visit, Hot or Not, survey, quiz or Q&A, with its items and background
+//   3 Module      the staging page the card's module sits on
+//   4 Reward      what fans get
+//   5 Status      active / disabled
+// In the guided setup (only = section number) one section shows at a time and
+// is saved when the guide moves on.
 // "Save" keeps it in Ktulu; "Save and update staging" builds card, engagement
 // and module on staging (the parent asks first).
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import BuildPages from "./BuildPages";
 
 type LV = { en?: string; de?: string };
@@ -94,15 +96,16 @@ function LocInputs({ value, onChange, ph }: { value: LV; onChange: (v: LV) => vo
 }
 
 export default function SetupStep({
-  cardId, cardName, imageUrl, onStaging, canBuild, initialSetup, initialBrief, disabled, onToggleDisabled, onImage, onSaved, onBuild,
+  cardId, cardName, imageUrl, onStaging, canBuild, initialSetup, initialBrief, disabled, onToggleDisabled, onImage, onSaved, onBuild, only,
 }: {
+  only?: number;
   cardId: string; cardName: string; imageUrl?: string; onStaging: boolean; canBuild: boolean;
   initialSetup?: Setup; initialBrief?: Brief; disabled: boolean; onToggleDisabled: (v: boolean) => void;
   onImage: (f: File) => Promise<void>; onSaved: () => void; onBuild: () => void;
 }) {
   const [setup, setSetup] = useState<Setup>(initialSetup ?? {});
   const [brief, setBrief] = useState<Brief>({ badgeType: initialBrief?.badgeType ?? "", race: initialBrief?.race ?? "", campaign: initialBrief?.campaign ?? "" });
-  const [open, setOpen] = useState(0);
+  const [open, setOpen] = useState(only ?? 0);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
@@ -156,11 +159,19 @@ export default function SetupStep({
     !!setup.reward?.type,
     true,
   ], [brief, imageUrl, eng, setup]);
-  const S = (i: number) => ({ n: i + 1, done: done[i], open: open === i, onToggle: () => setOpen(open === i ? -1 : i) });
+  const S = (i: number) => ({ n: i + 1, done: done[i], open: only !== undefined ? true : open === i, onToggle: () => (only !== undefined ? undefined : setOpen(open === i ? -1 : i)) });
+  // guided: the section the guide is on; a change is saved when the guide moves on
+  const shown = (i: number) => only === undefined || only === i;
+  const latest = useRef({ dirty, save });
+  latest.current = { dirty, save };
+  useEffect(() => () => {
+    if (only !== undefined && latest.current.dirty) void latest.current.save(false);
+  }, [only]);
 
   return (
     <div style={{ display: "grid", gap: 10, maxWidth: 900, paddingBottom: 90 }}>
-      <Section {...S(0)} title="The card" lead={[brief.badgeType || "No type", brief.race || "No Grand Prix", brief.campaign || "No campaign"].join(" · ")}>
+      {shown(0) && (
+      <Section {...S(0)} title="Card" lead={[brief.badgeType || "No type", brief.race || "No Grand Prix", brief.campaign || "No campaign"].join(" · ")}>
         <div style={{ display: "grid", gap: 6 }}>
           <span style={{ color: C.mute, fontSize: 12 }}>Card type</span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -187,8 +198,10 @@ export default function SetupStep({
           <Upload label="Back (flipped card)" url={setup.backImageUrl} busy={busy === "back side"} onFile={async (f) => { const a = await asset(f, "back side"); if (a) up((s) => ({ ...s, backImageId: a.id, backImageUrl: a.url })); }} />
         </div>
       </Section>
+      )}
 
-      <Section {...S(1)} title="How fans earn it" lead={ENG.find((x) => x.key === eng.type)?.title + (eng.items.length ? ` · ${eng.items.length} item${eng.items.length === 1 ? "" : "s"}` : "")}>
+      {shown(1) && (
+      <Section {...S(1)} title="Engagement · how fans earn it" lead={ENG.find((x) => x.key === eng.type)?.title + (eng.items.length ? ` · ${eng.items.length} item${eng.items.length === 1 ? "" : "s"}` : "")}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6 }}>
           {ENG.map((x) => (
             <button key={x.key} style={pill(eng.type === x.key)} onClick={() => setEng({ type: x.key, items: x.key === "q-and-a" ? eng.items.slice(0, 1) : eng.items })}>
@@ -243,8 +256,10 @@ export default function SetupStep({
           </div>
         )}
       </Section>
+      )}
 
-      <Section {...S(2)} title="Where it sits" lead={setup.module?.pageUrl ? `/${setup.module.pageUrl}` : "No page yet"}>
+      {shown(2) && (
+      <Section {...S(2)} title="Module · the page it sits on" lead={setup.module?.pageUrl ? `/${setup.module.pageUrl}` : "No page yet"}>
         <div style={{ color: C.mute, fontSize: 12 }}>The page that shows the card&apos;s module with the task. It is added at the end of the page as a draft; move it in the CMS if needed.</div>
         <input style={input} placeholder={`Search pages${camp?.root ? ` (showing /${camp.root}…)` : ""}`} value={q} onChange={(e) => setQ(e.target.value)} />
         <div style={{ display: "grid", gap: 4, maxHeight: 220, overflow: "auto" }}>
@@ -261,8 +276,10 @@ export default function SetupStep({
           })}
         </div>
       </Section>
+      )}
 
-      <Section {...S(3)} title="What fans get" lead={REWARD.find((x) => x.key === setup.reward?.type)?.title ?? "Not set"}>
+      {shown(3) && (
+      <Section {...S(3)} title="Reward · what fans get" lead={REWARD.find((x) => x.key === setup.reward?.type)?.title ?? "Not set"}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6 }}>
           {REWARD.map((x) => (
             <button key={x.key} style={pill(setup.reward?.type === x.key)} onClick={() => up((s) => ({ ...s, reward: { type: x.key } }))}>
@@ -273,14 +290,17 @@ export default function SetupStep({
         </div>
         <div style={{ fontSize: 12, color: C.mute }}>Reward texts (teaser, description) are on the screens in the steps Logged in and Collection.</div>
       </Section>
+      )}
 
-      <Section {...S(4)} title="Live or not" lead={disabled ? "Disabled" : "Active"}>
+      {shown(4) && (
+      <Section {...S(4)} title="Status · live or disabled" lead={disabled ? "Disabled" : "Active"}>
         <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <input type="checkbox" checked={!disabled} onChange={(e) => onToggleDisabled(!e.target.checked)} />
           Card is active
         </label>
         <div style={{ fontSize: 12, color: C.mute }}>A disabled card loses the link to its engagement and module. Cards built from Ktulu start disabled; switch them on once everything is checked. Goes to staging with Review.</div>
       </Section>
+      )}
 
       <div style={{ position: "sticky", bottom: 0, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.line2}`, background: "rgba(20,20,23,.96)", boxShadow: "0 -12px 30px -18px rgba(0,0,0,.8)" }}>
         <button style={{ ...smallBtn, height: 36, background: dirty ? C.lava : "transparent", borderColor: dirty ? C.lava : C.line2, fontWeight: 600 }} disabled={!!busy} onClick={() => void save(false)}>

@@ -166,6 +166,30 @@ export const saveCardsPublic = saveCards;
 // A card imported from the tracker that has no badge on staging yet.
 export const onStaging = (c: CardRecord) => !!c.staging.badgeId;
 
+// A new card made in Ktulu (guided setup): next free TC number, only the brief
+// so far; texts, engagement and module follow step by step.
+export async function createCard(input: { name: string; badgeType?: string; campaign?: string; race?: string }, by: string): Promise<CardRecord> {
+  const name = input.name.trim();
+  if (!name) throw new Error("Give the card a name first");
+  const cards = await listCards();
+  if (cards.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`A card called “${name}” exists already`);
+  const max = Math.max(0, ...cards.map((c) => (/^TC-(\d+)$/.exec(c.id) ? Number(/^TC-(\d+)$/.exec(c.id)![1]) : 0)));
+  const at = new Date().toISOString();
+  const rec: CardRecord = {
+    id: `TC-${String(max + 1).padStart(3, "0")}`,
+    name,
+    status: "Briefed",
+    staging: { badgeId: "" },
+    values: { publicTitle: { en: name, de: "" } },
+    brief: { source: "ktulu", badgeType: input.badgeType ?? "", campaign: input.campaign ?? "", race: input.race ?? "", importedAt: at },
+    updatedAt: at,
+    log: [{ at, by, summary: "Created in Ktulu (guided setup)" }],
+  };
+  cards.push(rec);
+  await saveCards(cards);
+  return rec;
+}
+
 export async function getCard(id: string): Promise<CardRecord | undefined> {
   return (await listCards()).find((c) => c.id.toLowerCase() === id.toLowerCase());
 }

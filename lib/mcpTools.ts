@@ -10,6 +10,7 @@ import { SCENE_TAGS, peopleInText, uniqueTags, type Scene } from "./contentTags"
 import { readBatch, readPreview, writeBatch } from "./assetBatchStore";
 import { readKnowledge, KNOWLEDGE_KEY } from "./knowledgeStore";
 import { kvSet } from "./kv";
+import { listRules, rulesText } from "./teamCardRules";
 import { searchLibrary, fetchLibraryImage } from "./library";
 import { addExample, readExamples } from "./examplesStore";
 import { addReference, listReferences, readReferenceImage } from "./referenceStore";
@@ -485,7 +486,8 @@ ${SEO_WRITE_RECIPE}`);
         const val = f.localized ? `EN: ${JSON.stringify((v as LocValue)?.en ?? "")} | DE: ${JSON.stringify((v as LocValue)?.de ?? "")}` : `value: ${JSON.stringify(v)}`;
         return `[${f.step}] ${f.key} (${f.label}${f.maxWords ? `, max ${f.maxWords} words` : ""}${f.options ? `, one of ${f.options.join("/")}` : ""}${f.localized ? "" : ", not per language"}) ${val}`;
       });
-      return text(`${c.id} · ${c.name} · status ${c.status}\n${lines.join("\n")}\nLast changes: ${c.log.slice(0, 3).map((l) => `${l.at.slice(0, 16)} ${l.summary}`).join("; ")}`);
+      const rules = rulesText(await listRules(), (k) => FIELDS.find((f) => f.key === k)?.label ?? k);
+      return text(`${c.id} · ${c.name} · status ${c.status}\n${lines.join("\n")}\n\nWriting rules (follow them in every text you propose; the team keeps them in Team Cards → Lexicon):\n${rules}\nLast changes: ${c.log.slice(0, 3).map((l) => `${l.at.slice(0, 16)} ${l.summary}`).join("; ")}`);
     },
   },
   {

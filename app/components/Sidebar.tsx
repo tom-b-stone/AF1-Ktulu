@@ -51,6 +51,7 @@ const SIDEBARS: Record<string, Section[]> = {
       entries: [
         { href: "/teamcards", label: "All cards", hint: "Edit texts and see the whole journey", exact: true },
         { href: "/teamcards/figma", label: "Figma Sync", hint: "Changes, setup and plugin", exact: true },
+        { href: "/teamcards/lexicon", label: "Lexicon", hint: "Writing rules and approved wordings", exact: true },
       ],
     },
     {
