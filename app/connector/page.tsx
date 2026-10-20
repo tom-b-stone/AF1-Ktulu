@@ -15,6 +15,9 @@ export default function ConnectorPage() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [replay, setReplay] = useState(false);
+  const [copiedCo, setCopiedCo] = useState(false);
+  const [companyUrl, setCompanyUrl] = useState("https://af1-ktulu.vercel.app/api/mcp");
+  useEffect(() => setCompanyUrl(`${window.location.origin}/api/mcp`), []);
 
   const refresh = () =>
     fetch("/api/connector")
@@ -75,8 +78,8 @@ export default function ConnectorPage() {
       </button>
       {replay && <ConnectorOnboarding force onClose={() => setReplay(false)} />}
       <p style={{ opacity: 0.7, fontSize: 13, marginTop: 0 }}>
-        Lets your own Claude (claude.ai) use the AF1 tools directly. With it, &quot;Generate SEO title&quot; ends with
-        Claude publishing the text itself — no link to click. Set it up once per person, about one minute.
+        Lets Claude (claude.ai) use the AF1 tools directly. With it, &quot;Generate SEO title&quot; ends with Claude
+        publishing the text itself, no link to click.
       </p>
 
       {status && !status.persistent && (
@@ -85,6 +88,30 @@ export default function ConnectorPage() {
         </div>
       )}
 
+      <section style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", margin: "20px 0 8px", display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+          <b style={{ fontSize: 15 }}>Company connector</b>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>One connector for everyone at SLASH, sign in with Google</span>
+        </div>
+        <div style={code}>{companyUrl}</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => void navigator.clipboard.writeText(companyUrl).then(() => { setCopiedCo(true); setTimeout(() => setCopiedCo(false), 2000); }).catch(() => {})} style={btn(false)}>
+            {copiedCo ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <ol style={{ fontSize: 13, lineHeight: 1.7, paddingLeft: 20, margin: 0 }}>
+          <li>
+            <b>Owner, once:</b> claude.ai → Organization settings → Connectors → Add → Custom → Web. Name <b>AF1 Tools</b>, URL above, authentication: sign in when needed. Claude finds the sign-in by itself.
+          </li>
+          <li>
+            <b>Everyone:</b> claude.ai → Customize → Connectors → AF1 Tools → <b>Connect</b>, sign in with Google, click Allow.
+          </li>
+          <li>Each person gets their own tools from the access board, and every action is logged under their email.</li>
+        </ol>
+      </section>
+
+      <details style={{ marginTop: 12 }}>
+        <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--muted)" }}>Personal link instead (the older way, still works)</summary>
       <h2 style={{ fontSize: 15, marginTop: 24 }}>1. Make your personal connector URL</h2>
       {status?.active && !url && (
         <p style={{ fontSize: 13, opacity: 0.7 }}>
@@ -137,6 +164,7 @@ export default function ConnectorPage() {
         What Claude can do through it: list pages missing SEO, read a page&apos;s content, publish SEO text (same brand-rule
         checks as the edit drawer, publication date always preserved). Every action is logged under your email.
       </p>
+      </details>
     </div>
   );
 }
