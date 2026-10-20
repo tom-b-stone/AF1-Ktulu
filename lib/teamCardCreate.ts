@@ -85,14 +85,25 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     if (card.brief?.imageId) doc.badgeImage = card.brief.imageId;
     else steps.push({ step: "no card image yet: the template image stays until one is set", ok: true });
     const tagType = (t: Json, d: string) => (t && typeof t === "object" && t.type ? t.type : d);
+    // a tag that can't be found or created is skipped (noted), never fatal
+    const tag = async (title: string, type: string) => {
+      try {
+        return await loyaltyTag({ title, type }, steps);
+      } catch (e) {
+        steps.push({ step: `tag "${title}" (${type}) skipped`, ok: true, detail: e instanceof Error ? e.message.slice(0, 160) : undefined });
+        return undefined;
+      }
+    };
     if (card.brief?.badgeType) doc.badgeType = await badgeType({ title: card.brief.badgeType }, steps);
     else doc.badgeType = idOf(doc.badgeType);
     const race = String(card.brief?.race ?? card.raceLabel ?? "");
-    doc.raceTag = race ? await loyaltyTag({ title: race, type: tagType(template.raceTag, "race") }, steps) : idOf(doc.raceTag);
+    doc.raceTag = race ? (await tag(race, tagType(template.raceTag, "race"))) ?? idOf(doc.raceTag) : idOf(doc.raceTag);
     const camp = await campaignOfCard(card);
-    doc.campaignTitle = camp ? await loyaltyTag({ title: camp.name, type: tagType(template.campaignTitle, "campaign") }, steps) : undefined;
-    doc.partnerTag = card.brief?.partner ? await loyaltyTag({ title: card.brief.partner, type: tagType(template.partnerTag, "partner") }, steps) : undefined;
-    doc.passionfieldTag = card.brief?.passionfield ? await loyaltyTag({ title: card.brief.passionfield, type: tagType(template.passionfieldTag, "passionfield") }, steps) : idOf(doc.passionfieldTag);
+    // campaign tags read like the Singapore one: "singapore 2026"
+    const season = String(card.brief?.season || "2026");
+    doc.campaignTitle = camp ? await tag(`${camp.name.toLowerCase()} ${season}`, tagType(template.campaignTitle, "campaign")) : undefined;
+    doc.partnerTag = card.brief?.partner ? await tag(card.brief.partner, tagType(template.partnerTag, "partner")) : undefined;
+    doc.passionfieldTag = card.brief?.passionfield ? (await tag(card.brief.passionfield, tagType(template.passionfieldTag, "passionfield"))) ?? idOf(doc.passionfieldTag) : idOf(doc.passionfieldTag);
     doc.season = idOf(doc.season);
 
     // 3 links: the campaign hub when it is on staging

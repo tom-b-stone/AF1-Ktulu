@@ -169,6 +169,7 @@ export default function Page() {
     },
     // eslint-disable-next-line @next/next/no-img-element
     { key: "img", header: "", width: "56px", cell: (c) => <img src={c.imageUrl || cardTemplate(c.name)} alt={c.imageUrl ? "" : "Card image not defined yet"} title={c.imageUrl ? undefined : "Card image not defined yet (template)"} style={{ width: 36, aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 4, display: "block" }} /> },
+    { key: "id", header: "No.", width: "84px", sortable: true, sortValue: (c) => c.id, cell: (c) => <span style={{ fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{c.id}</span> },
     {
       key: "name",
       header: "Card",
@@ -178,7 +179,7 @@ export default function Page() {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
           <div style={{ color: "var(--muted)", fontSize: 12 }}>
-            {c.id} · {MECH[c.mechanic ?? ""] ?? c.mechanic ?? "?"} · {REWARD[c.rewardType ?? ""] ?? c.rewardType ?? "?"}
+            {MECH[c.mechanic ?? ""] ?? c.mechanic ?? "No mechanic yet"} · {REWARD[c.rewardType ?? ""] ?? c.rewardType ?? "no reward set"}
           </div>
         </div>
       ),
@@ -227,7 +228,6 @@ export default function Page() {
       width: "200px",
       sortable: true,
       sortValue: (c) => campaignOf(c),
-      headerExtra: <HeaderSelect label="campaign" value={fCampaign} options={opts.campaign} onChange={setFCampaign} />,
       cell: (c) => <span style={{ fontSize: 12, color: campaignOf(c) === "No campaign" ? "var(--muted)" : undefined }}>{campaignOf(c)}</span>,
     },
     {
@@ -270,14 +270,20 @@ export default function Page() {
       )}
 
       {cards && (
-        <section aria-label="Summary" style={{ display: "grid", gap: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, maxWidth: 760 }}>
-            <Stat n={summary.total} label="Team Cards" active={!filtered} onClick={reset} />
-            <Stat n={summary.ready} label="Ready" tone="#7fd6a2" active={fQuick === "Ready"} onClick={() => setFQuick(fQuick === "Ready" ? ALL : "Ready")} />
-            <Stat n={summary.missing} label="Need attention" tone="#ff9a84" active={fQuick === "Missing"} onClick={() => setFQuick(fQuick === "Missing" ? ALL : "Missing")} />
-            {summary.disabled > 0 && <Stat n={summary.disabled} label="Disabled" active={fQuick === "Disabled"} onClick={() => setFQuick(fQuick === "Disabled" ? ALL : "Disabled")} />}
-            <Stat n={summary.core} label="Core cards" />
-          </div>
+        <section aria-label="Campaigns" role="group" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          {[["", `All · ${summary.total}`] as [string, string], ...summary.campaigns.map(([name, n]) => [name, `${name} · ${n}`] as [string, string])].map(([name, label]) => {
+            const on = fCampaign === name;
+            return (
+              <button
+                key={label}
+                aria-pressed={on}
+                onClick={() => setFCampaign(on && name ? ALL : name)}
+                style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12.5, cursor: "pointer", border: `1px solid ${on ? "var(--accent)" : "var(--border)"}`, background: on ? "rgba(255,45,0,.14)" : "transparent", color: on ? "var(--fg)" : "var(--muted)" }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </section>
       )}
 
