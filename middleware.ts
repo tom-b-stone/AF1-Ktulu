@@ -39,7 +39,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Tools in development are closed to the test group (pages and their APIs).
-  if (blockedPath(token.role as Role | undefined, pathname)) {
+  if (blockedPath(token.role as Role | undefined, pathname, token.tools as string[] | null | undefined)) {
     if (pathname.startsWith("/api/")) return NextResponse.json({ error: "This tool is still in development." }, { status: 403 });
     const url = req.nextUrl.clone();
     url.pathname = "/";

@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Replace from "./Replace";
+import TrackerImport from "./TrackerImport";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
 
 type Row = {
@@ -21,7 +22,7 @@ type Row = {
   imageUrl?: string;
   updatedAt: string;
   log: { at: string; by: string; summary: string }[];
-  links: { badge: string; engagement?: string; page?: string };
+  links: { badge?: string; engagement?: string; page?: string };
   meta: { type?: string; core: boolean; campaign?: string; race?: string; partner?: string; season?: string };
   check: { missing: string[]; quick: "Ready" | "Missing" | "Disabled" };
 };
@@ -198,7 +199,7 @@ export default function Page() {
         </div>
       ),
     },
-    { key: "links", header: "Staging", width: "190px", cell: (c) => <span style={{ fontSize: 12, whiteSpace: "nowrap" }}><a href={c.links.badge} target="_blank" rel="noreferrer">Card ↗</a>{c.links.engagement && <> · <a href={c.links.engagement} target="_blank" rel="noreferrer">Engagement ↗</a></>}{c.links.page && <> · <a href={c.links.page} target="_blank" rel="noreferrer">Page ↗</a></>}</span> },
+    { key: "links", header: "Staging", width: "190px", cell: (c) => <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>{c.links.badge ? <a href={c.links.badge} target="_blank" rel="noreferrer">Card ↗</a> : <span style={{ color: "var(--muted)" }}>Not on staging yet</span>}{c.links.engagement && <> · <a href={c.links.engagement} target="_blank" rel="noreferrer">Engagement ↗</a></>}{c.links.page && <> · <a href={c.links.page} target="_blank" rel="noreferrer">Page ↗</a></>}</span> },
     { key: "edit", header: "", width: "80px", cell: (c) => <Link className="btn btn-primary" href={`/teamcards/${c.id}`}>Edit</Link> },
   ];
 
@@ -247,6 +248,7 @@ export default function Page() {
       {cards && (
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <TrackerImport onDone={() => void load()} />
             <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ID, partner, missing text…" style={{ width: 320 }} aria-label="Search cards" />
             <span style={{ fontSize: 12, color: "var(--muted)" }}>
               {shown.length} of {cards.length} cards

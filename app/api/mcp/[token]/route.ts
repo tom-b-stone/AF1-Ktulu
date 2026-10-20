@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveConnectorToken } from "@/lib/connectorTokens";
 import { TOOLS, findTool } from "@/lib/mcpTools";
-import { roleOf } from "@/lib/auth";
+import { accessFor } from "@/lib/auth";
 import { canUseMcpTool } from "@/lib/toolAccess";
 
 // The "AF1 Tools" connector: a minimal MCP server over Streamable HTTP
@@ -45,20 +45,23 @@ async function handle(req: RpcRequest, actor: string): Promise<unknown | undefin
     }
     case "ping":
       return rpcResult(req.id, {});
-    case "tools/list":
+    case "tools/list": {
+      const acc = await accessFor(actor);
       return rpcResult(req.id, {
-        tools: TOOLS.filter((t) => canUseMcpTool(roleOf(actor), t.name)).map(({ name, description, inputSchema, annotations }) => ({
+        tools: TOOLS.filter((t) => canUseMcpTool(acc.role, t.name, acc.tools)).map(({ name, description, inputSchema, annotations }) => ({
           name,
           description,
           inputSchema,
           ...(annotations ? { annotations } : {}),
         })),
       });
+    }
     case "tools/call": {
       const name = typeof params.name === "string" ? params.name : "";
       const tool = findTool(name);
       if (!tool) return rpcError(req.id, -32602, `Unknown tool: ${name}`);
-      if (!canUseMcpTool(roleOf(actor), name)) return rpcError(req.id, -32602, `${name} is part of a tool that is still in development.`);
+      const acc = await accessFor(actor);
+      if (!canUseMcpTool(acc.role, name, acc.tools)) return rpcError(req.id, -32602, `${name} is part of a tool that is still in development.`);
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       try {
         return rpcResult(req.id, await tool.run(args, actor));

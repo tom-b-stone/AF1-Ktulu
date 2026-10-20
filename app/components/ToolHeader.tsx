@@ -96,7 +96,7 @@ export default function ToolHeader() {
         {/* Tools: a row of rotating 3D icons. Hover extends the pill
             horizontally and reveals the name; the current tool stays open. */}
         <nav aria-label="Tools" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
-          {TOOLS.filter((t) => canUseTool((session.user as { role?: Role } | undefined)?.role, t.key)).map((t) => {
+          {TOOLS.filter((t) => canUseTool((session.user as { role?: Role } | undefined)?.role, t.key, (session.user as { tools?: string[] | null } | undefined)?.tools ?? null)).map((t) => {
             const active = tool?.key === t.key;
             const preset = MORPH_PRESETS[t.key] ?? {};
             const inner = (

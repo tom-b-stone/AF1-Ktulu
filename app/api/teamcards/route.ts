@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const cards = await listCards();
     const meta = await cardMeta(cards).catch(() => ({}) as Awaited<ReturnType<typeof cardMeta>>);
-    return NextResponse.json({ cards: cards.map((c) => ({ ...c, links: stagingLinks(c), meta: meta[c.staging.badgeId] ?? { core: false }, check: cardCheck(c, meta[c.staging.badgeId]) })) });
+    return NextResponse.json({ cards: cards.map((c) => ({ ...c, links: stagingLinks(c), meta: meta[c.staging.badgeId] ?? { core: false, type: c.brief?.badgeType || undefined, campaign: c.brief?.campaign || (c.brief?.race ? `${c.brief.race} (tracker)` : undefined), race: c.brief?.race, partner: c.brief?.partner }, check: cardCheck(c, meta[c.staging.badgeId]) })) });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "failed" }, { status: 502 });
   }

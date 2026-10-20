@@ -1,4 +1,5 @@
-import { DEFAULT_TESTERS, type Role } from "./toolAccess";
+import type { Role } from "./toolAccess";
+import { accessOf } from "./accessStore";
 
 // Mirrors UTM Studio's access model (github.com/tom-b-stone/UTM-Studio):
 // Google sign-in restricted to the slash.digital domain, with a bootstrap
@@ -10,15 +11,9 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "tma@slash.digital")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
-// The test group: may sign in and use the tools that are live or ready to test.
-const TESTER_EMAILS = (process.env.TESTER_EMAILS ? process.env.TESTER_EMAILS.split(",") : DEFAULT_TESTERS).map((e) => e.trim().toLowerCase()).filter(Boolean);
-
-export function isTesterEmail(email: string | null | undefined): boolean {
-  return !!email && TESTER_EMAILS.includes(email.toLowerCase());
-}
-
-export function roleOf(email: string | null | undefined): Role {
-  return isAdminEmail(email) ? "admin" : isTesterEmail(email) ? "tester" : "editor";
+// Role and tool list from the access board (/admin/access).
+export async function accessFor(email: string | null | undefined): Promise<{ role: Role; tools: string[] | null; listed: boolean }> {
+  return accessOf(email, isAdminEmail(email));
 }
 
 const ALLOW_ALL_SLASH_DIGITAL = process.env.ALLOW_ALL_SLASH_DIGITAL === "true";
@@ -37,10 +32,11 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 // Whether this @slash.digital account may sign in at all. While
 // ALLOW_ALL_SLASH_DIGITAL is off (the default), only admins can get in —
 // flip that env var once ready to open it to the rest of the team.
-export function isAllowedEmail(email: string | null | undefined): boolean {
+export async function isAllowedEmail(email: string | null | undefined): Promise<boolean> {
   if (!email) return false;
   if (emailDomain(email) !== ALLOWED_DOMAIN) return false;
-  if (isAdminEmail(email) || isTesterEmail(email)) return true;
+  if (isAdminEmail(email)) return true;
+  if ((await accessFor(email)).listed) return true;
   return ALLOW_ALL_SLASH_DIGITAL;
 }
 

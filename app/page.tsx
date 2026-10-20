@@ -63,6 +63,7 @@ export default function Home() {
   const [bg, setBg] = useBackgroundChoice();
   const { data: session } = useSession();
   const role = (session?.user as { role?: Role } | undefined)?.role;
+  const tools = (session?.user as { tools?: string[] | null } | undefined)?.tools ?? null;
   return (
     <div style={{ maxWidth: 880, margin: "0 auto", paddingTop: 8, position: "relative", zIndex: 1 }}>
       <HomeBackground choice={bg} />
@@ -109,11 +110,11 @@ export default function Home() {
           <div key={t.key} className={`reveal reveal-d${(i % 6) + 1}`} style={{ display: "flex" }}>
             <HomeTile
               title={t.title}
-              href={canUseTool(role, t.key) ? t.href : undefined}
+              href={canUseTool(role, t.key, tools) ? t.href : undefined}
               tileKey={t.key}
               external={t.external}
               status={STATUS[RELEASE[t.key]?.status ?? "dev"]}
-              text={canUseTool(role, t.key) ? t.text : `${t.text} Opens for the test group once it is ready to test.`}
+              text={canUseTool(role, t.key, tools) ? t.text : `${t.text} Opens for the test group once it is ready to test.`}
             />
           </div>
         ))}

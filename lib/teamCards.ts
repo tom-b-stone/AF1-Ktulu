@@ -27,6 +27,8 @@ export type CardRecord = {
   rewardType?: string; // noReward, raffleSignup, couponCode
   placement?: string; // where the module sits, in words
   values: Record<string, LocValue | string | boolean | undefined>;
+  // briefing from the Team Cards Tracker (one-way import); trackerId links a card to its tracker row
+  brief?: { source?: string; trackerId?: string } & Record<string, string | undefined>;
   updatedAt: string;
   log: { at: string; by: string; summary: string }[];
 };
@@ -68,6 +70,7 @@ function setPath(o: Json, p: (string | number)[], v: unknown) {
 }
 
 async function readDoc(rec: CardRecord, doc: DocKind, loc: Loc): Promise<Json> {
+  if (!rec.staging.badgeId) return null;
   const q = `locale=${loc}&fallback-locale=none&depth=0`;
   if (doc === "badge") return stg(`/badges/${rec.staging.badgeId}?${q}`);
   if (doc === "engagement") return rec.staging.engagementId ? stg(`/engagements/${rec.staging.engagementId}?${q}`) : null;
@@ -119,6 +122,7 @@ export async function rawDocs(rec: CardRecord): Promise<RawDocs> {
 
 // Reads every field of a card from staging (both locales).
 export async function loadFromStaging(rec: CardRecord): Promise<CardRecord> {
+  if (!rec.staging.badgeId) return rec;
   const docs: Record<string, Json> = {};
   for (const d of ["badge", "engagement", "module"] as DocKind[]) for (const l of ["en", "de"] as Loc[]) docs[`${d}:${l}`] = await readDoc(rec, d, l);
   const values: CardRecord["values"] = {};
@@ -145,6 +149,10 @@ export async function listCards(): Promise<CardRecord[]> {
 async function saveCards(cards: CardRecord[]) {
   await kvSet(KEY, JSON.stringify(cards));
 }
+export const saveCardsPublic = saveCards;
+
+// A card imported from the tracker that has no badge on staging yet.
+export const onStaging = (c: CardRecord) => !!c.staging.badgeId;
 
 export async function getCard(id: string): Promise<CardRecord | undefined> {
   return (await listCards()).find((c) => c.id.toLowerCase() === id.toLowerCase());
@@ -162,8 +170,8 @@ export function diff(cards: CardRecord[], changes: Change[]): { rows: DiffRow[];
     const f = fieldByKey(c.key);
     if (!card) { errors.push(`Unknown card ${c.card}`); continue; }
     if (!f) { errors.push(`Unknown field ${c.key}`); continue; }
-    if (f.doc === "engagement" && !card.staging.engagementId) { errors.push(`${card.id} has no engagement`); continue; }
-    if (f.doc === "module" && !card.staging.blockId) { errors.push(`${card.id} has no module`); continue; }
+    if (card.staging.badgeId && f.doc === "engagement" && !card.staging.engagementId) { errors.push(`${card.id} has no engagement`); continue; }
+    if (card.staging.badgeId && f.doc === "module" && !card.staging.blockId) { errors.push(`${card.id} has no module`); continue; }
     if (f.localized && c.locale !== "en" && c.locale !== "de") { errors.push(`${card.id} ${f.label}: say which language (en or de)`); continue; }
     if (f.options && !f.options.includes(String(c.value))) { errors.push(`${card.id} ${f.label}: one of ${f.options.join(", ")}`); continue; }
     const cur = card.values[f.key];
@@ -200,7 +208,7 @@ export async function applyChanges(changes: Change[], by: string): Promise<{ app
   for (const [cardId, list] of byCard) {
     const card = cards.find((c) => c.id === cardId)!;
     try {
-      for (const doc of ["badge", "engagement", "module"] as DocKind[]) {
+      for (const doc of card.staging.badgeId ? (["badge", "engagement", "module"] as DocKind[]) : []) {
         const mine = list.filter((r) => fieldByKey(r.key)!.doc === doc);
         if (!mine.length) continue;
         const locs = [...new Set(mine.map((r) => r.locale ?? "en"))] as Loc[];
@@ -259,7 +267,7 @@ export async function reloadCard(id: string): Promise<CardRecord | undefined> {
 export function stagingLinks(c: CardRecord) {
   const base = "https://staging.audif1team.com/cms/admin/collections";
   return {
-    badge: `${base}/badges/${c.staging.badgeId}`,
+    badge: c.staging.badgeId ? `${base}/badges/${c.staging.badgeId}` : undefined,
     engagement: c.staging.engagementId ? `${base}/engagements/${c.staging.engagementId}` : undefined,
     page: c.staging.pageId ? `${base}/pages/${c.staging.pageId}` : undefined,
   };
@@ -318,7 +326,7 @@ const tagTitle = (t: Json): string | undefined => (t && typeof t === "object" ? 
 
 // One staging read for all cards: badge type and loyalty tags (campaign, race, partner, season).
 export async function cardMeta(cards: CardRecord[]): Promise<Record<string, CardMeta>> {
-  const ids = [...new Set(cards.map((c) => c.staging.badgeId))];
+  const ids = [...new Set(cards.map((c) => c.staging.badgeId).filter(Boolean))];
   if (!ids.length) return {};
   const w = encodeURIComponent(JSON.stringify({ id: { in: ids } }));
   const r = await stg(`/badges?where=${w}&limit=200&depth=1&locale=en&draft=true`).catch(() => ({ docs: [] }));
@@ -355,12 +363,15 @@ export function cardCheck(c: CardRecord, meta?: CardMeta): CardCheck {
   ["publicTitle", "description", "badgePopupTitle", "revealTitle", "revealDescription", "revealButton", "ctaLabel"].forEach(need);
   if (c.rewardType && c.rewardType !== "noReward") ["rewardDescription", "rewardTeaser"].forEach(need);
   if (ENGAGED.has(c.mechanic ?? "")) {
-    if (!c.staging.engagementId) missing.push("Engagement");
+    if (c.staging.badgeId && !c.staging.engagementId) missing.push("Engagement");
     else ["question", "submitLabel", "postTitle", "postMessage"].forEach(need);
   }
-  if (meta && !meta.campaign) missing.push("Campaign tag");
-  if (meta && !meta.type) missing.push("Card type");
-  if (!c.staging.pageId || !c.staging.blockId) missing.push("Placement on a page");
-  else need("modHeadline");
+  if (!c.staging.badgeId) missing.push("Not built on staging yet");
+  if (meta && c.staging.badgeId && !meta.campaign) missing.push("Campaign tag");
+  if (meta && c.staging.badgeId && !meta.type) missing.push("Card type");
+  if (c.staging.badgeId) {
+    if (!c.staging.pageId || !c.staging.blockId) missing.push("Placement on a page");
+    else need("modHeadline");
+  }
   return { missing, quick: missing.length ? "Missing" : "Ready" };
 }

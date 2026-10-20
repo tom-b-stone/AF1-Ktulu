@@ -67,6 +67,7 @@ const SIDEBARS: Record<string, Section[]> = {
     {
       title: "Admin",
       entries: [
+        { href: "/admin/access", label: "Access", note: "test users" },
         { href: "/admin/messages", label: "Message board", note: "suggestions" },
         { href: "/admin/credentials", label: "CMS credentials" },
         { href: "/admin/anthropic", label: "Claude API", note: "in-tool generation" },
