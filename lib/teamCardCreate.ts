@@ -7,7 +7,7 @@
 // image, card type, Grand Prix, campaign, partner. Links point to the
 // campaign's hub page when it is on staging. Engagement and module on a page
 // are the next step; the card stays disabled until someone switches it on.
-import { listCards, saveCardsPublic, type CardRecord } from "./teamCards";
+import { listCards, loadFromStaging, saveCardsPublic, type CardRecord } from "./teamCards";
 import { FIELDS } from "./teamCardFields";
 import { badgeType, loyaltyTag, stg, upsertLocalised, type CopyStep } from "./teamCardCopy";
 import { listCampaigns } from "./sitemapSync";
@@ -145,6 +145,12 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     else if (setup.module?.pageId) blockId = await placeModule(card, badgeId, engagementId, setup.module.pageId, steps).catch((e) => { steps.push({ step: "module not placed", ok: false, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) }); return undefined; });
     card.staging = { ...card.staging, badgeId, ...(engagementId ? { engagementId } : {}), ...(blockId ? { pageId: setup.module!.pageId, blockId } : {}) };
     card.brief = { ...(card.brief ?? {}), builtOnStaging: new Date().toISOString() };
+    // module texts made in Figma (and the engagement as built) come back into the editor
+    if (setup.module?.fromFigma) {
+      const fresh = await loadFromStaging(card).catch(() => null);
+      // only module and engagement texts: card texts stay as typed (a German text the CMS got as an English stand-in stays "missing" here)
+      if (fresh) for (const f of FIELDS) if (f.doc !== "badge") card.values[f.key] = fresh.values[f.key];
+    }
     card.status = "Staging";
     card.updatedAt = new Date().toISOString();
     card.log = [{ at: card.updatedAt, by, summary: builtHere ? "Built on staging again (disabled, updated)" : "Built on staging (disabled)" }, ...card.log].slice(0, 50);
