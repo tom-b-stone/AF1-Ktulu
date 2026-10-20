@@ -29,8 +29,19 @@ export type CardRecord = {
   values: Record<string, LocValue | string | boolean | undefined>;
   // briefing from the Team Cards Tracker (one-way import); trackerId links a card to its tracker row
   brief?: { source?: string; trackerId?: string } & Record<string, string | undefined>;
+  // how the card is set up beyond its texts (Setup step): engagement, page module, reward, back image
+  setup?: CardSetup;
   updatedAt: string;
   log: { at: string; by: string; summary: string }[];
+};
+
+export type SetupItem = { id: string; text: LocValue; mediaId?: string; imageUrl?: string; options?: LocValue[]; correct?: number };
+export type CardSetup = {
+  engagement?: { type: "page" | "hot-or-not" | "survey" | "quiz" | "q-and-a"; items: SetupItem[]; bg?: { type: "color" | "image"; color?: string; mediaId?: string; imageUrl?: string } };
+  module?: { pageId?: string; pageUrl?: string; pageTitle?: string };
+  reward?: { type: "noReward" | "raffleSignup" | "couponCode" | "downloadAsset" };
+  backImageId?: string;
+  backImageUrl?: string;
 };
 
 const KEY = "teamcards:v1";
@@ -506,4 +517,45 @@ export async function cardsForArt() {
     figmaNode: c.brief?.figmaNode ?? null,
     hash: c.brief?.figmaArtHash ?? null,
   }));
+}
+
+// ---- setup (Setup step) -------------------------------------------------------------
+// Saves what the card is beyond its texts. Card type, Grand Prix and campaign
+// live in the briefing; mechanic and reward type mirror the setup so lists and
+// checks see them.
+export async function saveSetup(id: string, input: { setup?: CardSetup; brief?: Record<string, string> }, by: string) {
+  const cards = await listCards();
+  const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  if (!card) throw new Error("card not found");
+  if (input.setup) {
+    card.setup = { ...(card.setup ?? {}), ...input.setup };
+    if (card.setup.engagement?.type) card.mechanic = card.setup.engagement.type;
+    if (card.setup.reward?.type) card.rewardType = card.setup.reward.type;
+  }
+  if (input.brief) card.brief = { ...(card.brief ?? {}), ...Object.fromEntries(Object.entries(input.brief).map(([k, v]) => [k, String(v ?? "").trim()])) };
+  card.updatedAt = new Date().toISOString();
+  card.log = [{ at: card.updatedAt, by, summary: "Setup saved" }, ...card.log].slice(0, 50);
+  await saveCards(cards);
+  return card;
+}
+
+// an image for the setup (hot-or-not item, engagement background, back side)
+// through the same rules as card images
+export async function uploadCardAsset(id: string, file: Blob, purpose: string) {
+  const { listMediaFolders, uploadMedia } = await import("./payloadClient");
+  const card = await getCard(id);
+  if (!card) throw new Error("card not found");
+  const ext = /webp/.test(file.type) ? "webp" : /png/.test(file.type) ? "png" : "jpg";
+  const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const name = `${slug(cardImageName(card, undefined, "x").replace(/\.x$/, ""))}_${slug(purpose)}_${Date.now().toString(36)}.${ext}`;
+  const folders = await listMediaFolders().catch(() => []);
+  const folder = folders.find((f) => f.name === "Team Cards") ?? null;
+  const media = await uploadMedia(file, name, `${card.name}: ${purpose}`.slice(0, 125), folder?.id ?? null);
+  return { id: media.id, url: `/api/sitemap/media/${media.id}`, fileName: name };
+}
+
+export async function stagingPages(q: string) {
+  const where = encodeURIComponent(JSON.stringify(q ? { or: [{ url: { like: q } }, { title: { like: q } }] } : {}));
+  const r = await stg(`/pages?where=${where}&limit=40&depth=0&draft=true&locale=en&sort=url`).catch(() => ({ docs: [] }));
+  return ((r.docs ?? []) as Json[]).map((d) => ({ id: String(d.id), url: String(d.url ?? ""), title: String(d.title ?? "") }));
 }

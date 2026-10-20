@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { FIELDS, fieldByKey, fieldIssues, type FieldDef, type Loc } from "@/lib/teamCardFields";
 import { SitePhone } from "../SitePhone";
 import { cardTemplate } from "@/lib/cardTemplate";
+import SetupStep from "../SetupStep";
 import { HINTS, LANES, STEPS, TEAM_RULES, kindOf, stationsFor, type Lane, type Station } from "../journey";
 
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -337,7 +338,7 @@ export default function EditCard() {
   const goTo = (k: string) => {
     const st = stations.find((x) => keysIn(htmlOf(x)).includes(k));
     const f = fieldByKey(k);
-    const target = st ? STEPS.find((x) => x.lanes.includes(st.lane)) : f && !f.localized ? STEPS.find((x) => x.key === "settings") : undefined;
+    const target = st ? STEPS.find((x) => x.lanes.includes(st.lane)) : f && !f.localized ? STEPS.find((x) => x.key === "setup") : undefined;
     if (!target) return;
     setStep(target.key);
     setWhole(false);
@@ -680,27 +681,29 @@ export default function EditCard() {
       })()}
 
       {/* ---- settings ---- */}
-      {step === "settings" && (
-        <div style={{ padding: "22px 24px", maxWidth: 720, display: "grid", gap: 14 }}>
-          <div style={{ fontSize: 13.5, color: C.mute }}>{current.talk}</div>
-          {FIELDS.filter((f) => f.kind === "select" || f.kind === "boolean").map((f) => (
-            <label key={f.key} style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 12, alignItems: "center", fontSize: 13.5 }}>
-              <span>
-                {f.label}
-                {f.help && <span style={{ display: "block", fontSize: 11.5, color: C.mute }}>{f.help}</span>}
-              </span>
-              {f.kind === "boolean" ? (
-                <input type="checkbox" checked={textOf(f.key, "en") === "true"} onChange={(e) => setText(f.key, "en", String(e.target.checked))} />
-              ) : (
-                <select className="input" value={textOf(f.key, "en")} onChange={(e) => setText(f.key, "en", e.target.value)}>
-                  {(f.options ?? []).map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
-              )}
-            </label>
-          ))}
-          <div style={{ fontSize: 12.5, color: C.mute }}>Reward type: {card.rewardType ?? "no reward"}. Raffle and voucher fields appear here once a card uses them.</div>
+      {step === "setup" && (
+        <div style={{ padding: "22px 24px" }}>
+          <SetupStep
+            cardId={card.id}
+            cardName={card.name}
+            imageUrl={card.imageUrl}
+            onStaging={!!card.links.badge}
+            canBuild={!card.links.badge || !!row?.brief?.builtOnStaging || (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary))}
+            initialSetup={row?.setup}
+            initialBrief={row?.brief}
+            disabled={textOf("disabled", "en") === "true"}
+            onToggleDisabled={(v) => setText("disabled", "en", String(v))}
+            onImage={async (f) => {
+              const { compressImage } = await import("@/lib/imageCompress");
+              const c = await compressImage(f, 1600, 0.85).catch(() => null);
+              const fd = new FormData();
+              fd.append("file", c ? new File([c.blob], f.name.replace(/\.[a-z0-9]+$/i, c.mime === "image/webp" ? ".webp" : ".jpg"), { type: c.mime }) : f);
+              const j = await fetch(`/api/teamcards/${card.id}/image`, { method: "POST", body: fd }).then((r) => r.json()).catch(() => ({ error: "upload failed" }));
+              if (!j.error) setCard({ ...card, imageUrl: j.imageUrl });
+            }}
+            onSaved={() => { fetch("/api/teamcards").then((r) => r.json()).then((all) => setRow((all.cards ?? []).find((x: Json) => x.id === card.id) ?? row)).catch(() => {}); }}
+            onBuild={() => setAsk2({ title: card.links.badge ? "Update this card on staging?" : "Build this card on staging?", body: "Card, engagement and module are written to staging: the card stays disabled, the module is saved as a draft on its page. Nothing goes live.", ok: card.links.badge ? "Yes, update staging" : "Yes, build it", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/create`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Done. Reload to see the staging links.\n" : "Not finished.\n") + stepsText(j); } })}
+          />
         </div>
       )}
 
@@ -808,6 +811,12 @@ export default function EditCard() {
               <button disabled={askBusy} style={{ ...btn(), height: 36 }} onClick={() => setAsk2(null)}>Cancel</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {actMsg && step !== "overview" && (
+        <div role="status" onClick={() => setActMsg(null)} style={{ position: "fixed", right: 24, bottom: 24, zIndex: 90, maxWidth: 420, padding: "12px 14px", borderRadius: 12, background: C.panel, border: `1px solid ${actMsg.err ? "#e06c5b" : C.ok}`, fontSize: 12.5, whiteSpace: "pre-wrap", cursor: "pointer", boxShadow: "0 18px 40px -18px rgba(0,0,0,.8)" }}>
+          {actMsg.text}
         </div>
       )}
 

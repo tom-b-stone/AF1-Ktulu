@@ -106,21 +106,33 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     doc.passionfieldTag = card.brief?.passionfield ? (await tag(card.brief.passionfield, tagType(template.passionfieldTag, "passionfield"))) ?? idOf(doc.passionfieldTag) : idOf(doc.passionfieldTag);
     doc.season = idOf(doc.season);
 
-    // 3 links: the campaign hub when it is on staging
+    // 3 setup: reward, back image, engagement, where the module sits
+    const setup = card.setup ?? {};
+    doc.rewardType = setup.reward?.type || card.rewardType || "noReward";
+    if (doc.rewardType === "raffleSignup" && !(doc.raffleSubmitLabel?.en)) doc.raffleSubmitLabel = { en: "Enter the raffle", de: "Am Gewinnspiel teilnehmen" };
+    doc.badgeBackImage = setup.backImageId || idOf(doc.badgeBackImage);
     const hub = camp?.root ? (await stg(`/pages?where[url][equals]=${encodeURIComponent(camp.root)}&limit=1&depth=0&draft=true`).catch(() => ({ docs: [] }))).docs?.[0] : null;
-    doc.mechanics = hub ? [{ targetOriginType: "page", targetOriginPage: hub.id }] : (doc.mechanics ?? []).filter((m: Json) => m.targetOriginType !== "engagement").map((m: Json) => ({ ...m, targetOriginPage: idOf(m.targetOriginPage) }));
-    const linkTo = (cta: Json) => (hub ? { ...cta, linkType: cta.linkType ?? "internal", doc: { relationTo: "pages", value: hub.id } } : { ...cta, doc: undefined, linkType: "external", url: "https://staging.audif1team.com" });
+    const pageId: string | undefined = setup.module?.pageId || hub?.id;
+    const engagementId = await upsertEngagement(card, steps);
+    if (engagementId) doc.mechanics = [{ targetOriginType: "engagement", targetOriginEngagement: engagementId }];
+    else doc.mechanics = pageId ? [{ targetOriginType: "page", targetOriginPage: pageId }] : [];
+    const linkTo = (cta: Json) => (pageId ? { ...cta, linkType: "internal", url: undefined, doc: { relationTo: "pages", value: pageId } } : { ...cta, doc: undefined, linkType: "external", url: "https://staging.audif1team.com" });
     doc.unearnedBadgeCTA = (doc.unearnedBadgeCTA ?? []).slice(0, 1).map(linkTo);
     doc.rewardCTA = [];
     doc.raffleConfirmedCTA = [];
     doc.clusters = [];
     doc.isDraft = true; // disabled until someone switches it on
-    for (const k of ["badgeBackImage"]) doc[k] = idOf(doc[k]);
-    steps.push({ step: hub ? `links go to the campaign hub /${camp?.root}` : "campaign hub not on staging: links left generic", ok: true });
+    steps.push({ step: pageId ? `links go to ${setup.module?.pageUrl ? "/" + setup.module.pageUrl : "the campaign hub /" + camp?.root}` : "no page on staging yet: links left generic", ok: true });
 
     // 4 create (idempotent by title)
     const badgeId = await upsertLocalised("badges", doc, `where[or][0][title][equals]=${encodeURIComponent(title)}&where[or][1][title][equals]=${encodeURIComponent(card.name)}&locale=en`, steps, "card (disabled)");
-    card.staging = { ...card.staging, badgeId };
+    if (engagementId) {
+      await stg(`/engagements/${engagementId}`, { method: "PATCH", body: JSON.stringify({ loggedOutBadge: badgeId }) });
+      steps.push({ step: "engagement linked to the card", ok: true });
+    }
+    let blockId: string | undefined;
+    if (setup.module?.pageId) blockId = await placeModule(card, badgeId, engagementId, setup.module.pageId, steps).catch((e) => { steps.push({ step: "module not placed", ok: false, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) }); return undefined; });
+    card.staging = { ...card.staging, badgeId, ...(engagementId ? { engagementId } : {}), ...(blockId ? { pageId: setup.module!.pageId, blockId } : {}) };
     card.brief = { ...(card.brief ?? {}), builtOnStaging: new Date().toISOString() };
     card.status = "Staging";
     card.updatedAt = new Date().toISOString();
@@ -170,4 +182,80 @@ export async function fromProduction(id: string, by: string) {
     await reloadCard(card.id).catch(() => undefined);
   }
   return { ok: r.ok, steps: r.steps, badgeId: r.badgeId, prod: p };
+}
+
+// ---- engagement and module ------------------------------------------------------
+const both = (v?: { en?: string; de?: string }) => ({ en: v?.en || v?.de || "", de: v?.de || v?.en || "" });
+const DEFAULTS: Record<string, { en: string; de: string }> = {
+  overlayTitle: { en: "Successfully unlocked.", de: "Erfolgreich freigeschaltet." },
+  overlaySubtitle: { en: "Collect your Team Card now.", de: "Hol dir jetzt deine Team Card." },
+  submitLabel: { en: "Submit", de: "Absenden" },
+};
+
+// the card's engagement from its setup: created once, updated after (title "Name | TC-0xx")
+async function upsertEngagement(card: CardRecord, steps: CopyStep[]): Promise<string | undefined> {
+  const e = card.setup?.engagement;
+  if (!e || e.type === "page") return undefined;
+  if (!e.items.length) {
+    steps.push({ step: "engagement skipped: add at least one item or question in Setup", ok: false });
+    return undefined;
+  }
+  const doc: Json = {
+    title: both({ en: `${card.name} | ${card.id}` }),
+    engagementType: e.type,
+    background: e.bg?.type === "image" && e.bg.mediaId ? { type: "image", imageSettings: { media: e.bg.mediaId, shouldHaveOverlay: true } } : { type: "color", color: e.bg?.color || "grey-01", imageSettings: { shouldHaveOverlay: false } },
+    questions: e.items.map((it) => ({
+      text: both(it.text),
+      options: e.type === "survey" || e.type === "quiz" ? (it.options ?? []).filter((o) => o.en || o.de).map((o) => ({ text: both(o) })) : [],
+      ...(it.mediaId ? { assetId: it.mediaId } : {}),
+      shouldHaveOverlay: false,
+    })),
+  };
+  for (const f of FIELDS) {
+    if (f.doc !== "engagement" || f.key === "engTitle" || f.key === "question") continue;
+    const v = card.values[f.key] as { en?: string; de?: string } | undefined;
+    const val = v && (v.en || v.de) ? both(v) : DEFAULTS[f.key];
+    if (val) setPath(doc, f.path, val);
+  }
+  const find = card.staging.engagementId ? `where[id][equals]=${card.staging.engagementId}` : `where[title][equals]=${encodeURIComponent(`${card.name} | ${card.id}`)}&locale=en`;
+  return upsertLocalised("engagements", doc, find, steps, `engagement (${e.type})`);
+}
+
+const noIds = (v: Json): Json => (Array.isArray(v) ? v.map(noIds) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "id").map(([k, x]) => [k, noIds(x)])) : v);
+
+// the badge-engagement-teaser module on the chosen staging page, as a DRAFT version
+async function placeModule(card: CardRecord, badgeId: string, engagementId: string | undefined, pageId: string, steps: CopyStep[]): Promise<string | undefined> {
+  const cards = await listCards();
+  const withBlock = cards.filter((c) => c.staging.pageId && c.staging.blockId && c.id !== card.id);
+  const tplCard = withBlock.find((c) => c.mechanic === card.mechanic) ?? withBlock[0];
+  if (!tplCard) throw new Error("no module on staging to use as a template");
+  const tplPage = await stg(`/pages/${tplCard.staging.pageId}?locale=en&fallback-locale=none&depth=0&draft=true`);
+  const tb = (tplPage.sections ?? []).find((x: Json) => x.id === tplCard.staging.blockId);
+  if (!tb) throw new Error("template module not found");
+  const block: Json = noIds(tb);
+  block.badge = badgeId;
+  const kids: Json[] = (block.children ?? []).filter((c: Json) => c.blockType !== "engagement");
+  if (engagementId) kids.push({ blockType: "engagement", engagement: engagementId });
+  block.children = kids;
+  const mods = FIELDS.filter((f) => f.doc === "module");
+  const valOf = (k: string, l: "en" | "de") => { const v = card.values[k]; return v && typeof v === "object" ? String((v as Json)[l] || (v as Json).en || "") : typeof v === "string" ? v : undefined; };
+  for (const f of mods) { const v = valOf(f.key, "en"); if (v !== undefined) setPath(block, f.path, v); }
+  const isOurs = (x: Json) => x.blockType === "badge-engagement-teaser" && idOf(x.badge) === badgeId;
+  const en = await stg(`/pages/${pageId}?locale=en&fallback-locale=none&depth=0&draft=true`);
+  const sections: Json[] = en.sections ?? [];
+  const at = sections.findIndex(isOurs);
+  if (at >= 0) sections[at] = { ...block, id: sections[at].id };
+  else sections.push(block);
+  await stg(`/pages/${pageId}?locale=en&draft=true`, { method: "PATCH", body: JSON.stringify({ sections, _status: "draft" }) });
+  const de = await stg(`/pages/${pageId}?locale=de&fallback-locale=none&depth=0&draft=true`);
+  const ds: Json[] = de.sections ?? [];
+  const k = ds.findIndex(isOurs);
+  if (k >= 0) {
+    for (const f of mods) { const v = valOf(f.key, "de"); if (v !== undefined && f.localized) setPath(ds[k], f.path, v); }
+    await stg(`/pages/${pageId}?locale=de&draft=true`, { method: "PATCH", body: JSON.stringify({ sections: ds, _status: "draft" }) });
+  }
+  const again = await stg(`/pages/${pageId}?locale=en&depth=0&draft=true`);
+  const blockId = (again.sections ?? []).find(isOurs)?.id;
+  steps.push({ step: `module ${at >= 0 ? "updated" : "placed"} on /${en.url ?? pageId} (draft version, not published)`, ok: true, link: `${ADMIN}/pages/${pageId}` });
+  return blockId;
 }

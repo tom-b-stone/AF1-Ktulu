@@ -50,8 +50,7 @@ const SIDEBARS: Record<string, Section[]> = {
       title: "Team Cards",
       entries: [
         { href: "/teamcards", label: "All cards", hint: "Edit texts and see the whole journey", exact: true },
-        { href: "/teamcards/figma", label: "Figma Sync", hint: "What changed in Figma or the CMS", exact: true },
-        { href: "/teamcards/figma?tab=setup", label: "Figma setup", hint: "Plugin, boards, card artworks · step by step", exact: true },
+        { href: "/teamcards/figma", label: "Figma Sync", hint: "Changes, setup and plugin", exact: true },
       ],
     },
     {

@@ -54,7 +54,7 @@ function HeaderSelect({ label, value, options, onChange }: { label: string; valu
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onPointerDown={(e) => e.stopPropagation()}
-      style={{ maxWidth: 120, fontSize: 11, padding: "2px 4px", borderRadius: 6, border: `1px solid ${value ? "var(--accent)" : "var(--border-2)"}`, background: "var(--surface)", color: "var(--fg)" }}
+      style={{ maxWidth: 130, height: 26, fontSize: 11.5, padding: "0 22px 0 10px", borderRadius: 999, appearance: "none", WebkitAppearance: "none", border: `1px solid ${value ? "var(--accent)" : "var(--border-2)"}`, background: `${value ? "rgba(255,45,0,.12)" : "var(--surface)"} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b8a91' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center`, color: "var(--fg)", cursor: "pointer" }}
     >
       <option value={ALL}>All</option>
       {options.map((o) => (
