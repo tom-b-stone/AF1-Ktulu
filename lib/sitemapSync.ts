@@ -44,7 +44,7 @@ const S = (u: string) => (u ? `unlock-singapore/${u}` : "unlock-singapore");
 export const CAMPAIGNS: Record<string, Campaign> = {
   sin: {
     key: "sin",
-    name: "Unlock Singapore",
+    name: "Singapore",
     root: "unlock-singapore",
     figmaFile: "rGxt5J0qhiK759uEbaKgTO",
     figmaPage: "692:56",

@@ -638,16 +638,16 @@ export default function EditCard() {
                 </button>
                 <span style={{ fontSize: 12.5, color: C.mute }}>{next.why}</span>
               </div>
-              {(!card.links.badge || prod) && (
+              {(!card.links.badge || prod || (row?.brief?.builtOnStaging ?? (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary)))) && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
                   {prod && (
                     <button style={btn(!card.links.badge)} onClick={() => setAsk2({ title: "Get this card from production?", body: `“${prod.title}” is live on production. Its texts, images, engagement and module are copied to staging. Whatever is on staging for this card now is overwritten.`, ok: "Yes, copy from production", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/from-prod`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Copied from production. Reload to see the staging content.\n" : "Not finished.\n") + stepsText(j); } })}>
                       Get from production
                     </button>
                   )}
-                  {!card.links.badge && (
+                  {(!card.links.badge || row?.brief?.builtOnStaging || (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary))) && (
                     <button style={btn(!prod)} onClick={() => setAsk2({ title: "Build this card on staging?", body: "It is created as a disabled card with its texts in EN and DE, the card image, card type, Grand Prix and campaign. Links go to the campaign hub. Engagement and module on a page come next.", ok: "Yes, build it", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/create`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Built on staging (disabled). Reload to see the links.\n" : "Not built.\n") + stepsText(j); } })}>
-                      Build on staging
+                      {card.links.badge ? "Update on staging" : "Build on staging"}
                     </button>
                   )}
                   {actMsg && <span style={{ fontSize: 12.5, whiteSpace: "pre-wrap", color: actMsg.err ? "#e06c5b" : C.ok, flexBasis: "100%" }}>{actMsg.text}</span>}

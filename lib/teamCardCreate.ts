@@ -39,7 +39,9 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
   const cards = await listCards();
   const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
   if (!card) return { ok: false, steps: [{ step: "card not found", ok: false }] };
-  if (card.staging.badgeId) return { ok: true, steps: [{ step: "already on staging", ok: true, link: `${ADMIN}/badges/${card.staging.badgeId}` }], badgeId: card.staging.badgeId };
+  // a card Ktulu built may be built again (updates it); a card from elsewhere is left alone
+  const builtHere = !!card.brief?.builtOnStaging || card.log.some((l) => /^Built on staging/.test(l.summary));
+  if (card.staging.badgeId && !builtHere) return { ok: true, steps: [{ step: "already on staging", ok: true, link: `${ADMIN}/badges/${card.staging.badgeId}` }], badgeId: card.staging.badgeId };
   try {
     // 1 template: a staging card of the same type, else any staging card
     const onStg = cards.filter((c) => c.staging.badgeId);
@@ -66,10 +68,14 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     for (const f of FIELDS) {
       if (f.doc !== "badge") continue;
       const v = card.values[f.key];
-      if (v === undefined || v === "") continue;
+      if (v === undefined || v === "") {
+        // nothing set on the card: clear the template's text instead of keeping it (e.g. another card's button label)
+        if (f.localized) setPath(doc, f.path, f.key === "publicTitle" ? { en: card.name, de: card.name } : { en: "", de: "" });
+        continue;
+      }
       if (f.localized) {
         const lv = v as { en?: string; de?: string };
-        if (!lv.en && !lv.de) continue;
+        if (!lv.en && !lv.de) { setPath(doc, f.path, { en: "", de: "" }); continue; }
         // the CMS needs every text in both languages: a missing German text gets the English one for now
         if (!lv.de && lv.en) deFallback.push(f.label);
         setPath(doc, f.path, { en: lv.en || lv.de || "", de: lv.de || lv.en || "" });
@@ -104,9 +110,10 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     // 4 create (idempotent by title)
     const badgeId = await upsertLocalised("badges", doc, `where[or][0][title][equals]=${encodeURIComponent(title)}&where[or][1][title][equals]=${encodeURIComponent(card.name)}&locale=en`, steps, "card (disabled)");
     card.staging = { ...card.staging, badgeId };
+    card.brief = { ...(card.brief ?? {}), builtOnStaging: new Date().toISOString() };
     card.status = "Staging";
     card.updatedAt = new Date().toISOString();
-    card.log = [{ at: card.updatedAt, by, summary: "Built on staging (disabled)" }, ...card.log].slice(0, 50);
+    card.log = [{ at: card.updatedAt, by, summary: builtHere ? "Built on staging again (disabled, updated)" : "Built on staging (disabled)" }, ...card.log].slice(0, 50);
     await saveCardsPublic(cards);
     return { ok: true, steps, badgeId };
   } catch (e) {
