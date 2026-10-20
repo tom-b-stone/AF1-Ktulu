@@ -6,7 +6,7 @@ import { blockedPath, type Role } from "./lib/toolAccess";
 // never by a browser with a session cookie. It authenticates itself with the
 // per-user token in its path (lib/connectorTokens.ts).
 // /p/<slug> is the public photobook share page (QR code on the printed book).
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/mcp", "/api/figma", "/api/capture", "/p", "/zine", "/af1-live", "/bg", "/slash-logo.png"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/mcp", "/api/figma", "/api/capture", "/p", "/zine", "/af1-live", "/bg", "/slash-logo.png", "/videos"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

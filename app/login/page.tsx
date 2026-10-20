@@ -76,7 +76,9 @@ export default function LoginPage() {
       <style>{`
         .ktulu-gate { position: fixed; inset: 0; z-index: 2000; display: flex; flex-direction: column; overflow: hidden; background: #000; color: #f5f5f5; font-family: "DM Sans", "Archivo", system-ui, sans-serif; }
         .ktulu-gate .bg { position: absolute; inset: 0; pointer-events: none; }
-        .ktulu-gate .bg canvas { border-radius: 0 !important; opacity: .75; width: 100% !important; height: 100% !important; }
+        .ktulu-gate .bg canvas { position: absolute; inset: 0; border-radius: 0 !important; opacity: .7; mix-blend-mode: screen; width: 100% !important; height: 100% !important; }
+        .ktulu-gate .film { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+        .ktulu-gate .filmshade { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
         .ktulu-gate .shade { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(80% 75% at 25% 75%, rgba(0,0,0,.82), rgba(0,0,0,.35) 70%, rgba(0,0,0,.15)); }
         .ktulu-gate header, .ktulu-gate main, .ktulu-gate footer { position: relative; padding-left: 48px; padding-right: 48px; }
         .ktulu-gate header { display: flex; align-items: center; justify-content: space-between; padding-top: 26px; padding-bottom: 26px; }
@@ -95,8 +97,14 @@ export default function LoginPage() {
         .ktulu-gate footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 22px; padding-bottom: 24px; font-size: 12px; color: #8c8c8c; }
         @media (max-width: 640px) { .ktulu-gate header, .ktulu-gate main, .ktulu-gate footer { padding-left: 16px; padding-right: 16px; } .ktulu-gate .mark h1 { font-size: 34px !important; } .ktulu-gate .card { padding: 22px; } }
       `}</style>
+      {/* the slash.digital hero film, with the Vapor ASCII field layered on top (screen blend: its black drops out) */}
       <div className="bg" aria-hidden>
-        {h > 0 && <KtuluLogo source={{ src: "/bg/ktulu.jpg", gamma: 1.5, gain: 1.0, fit: "cover" }} height={h} />}
+        <video className="film" autoPlay muted loop playsInline preload="auto">
+          <source src="/videos/slash-hero-mobile.mp4" type="video/mp4" media="(max-width: 767px)" />
+          <source src="/videos/slash-hero-desktop.mp4" type="video/mp4" />
+        </video>
+        <div className="filmshade" />
+        {h > 0 && <KtuluLogo source={{ src: "/bg/vapor.jpg", gamma: 1.5, gain: 1.15, fit: "cover" }} height={h} />}
       </div>
       <div className="shade" aria-hidden />
 
