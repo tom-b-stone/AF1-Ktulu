@@ -110,6 +110,7 @@ export default function EditCard() {
   const [review, setReview] = useState<{ rows: Json[]; errors: string[] } | null>(null);
   const [result, setResult] = useState<{ pushed: string[]; errors: string[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [imgErr, setImgErr] = useState<string | null>(null);
 
   // ---- load ---------------------------------------------------------------
   useEffect(() => {
@@ -545,7 +546,26 @@ export default function EditCard() {
             {/* the card itself: image, name, type, campaign, how to earn, context */}
             <section aria-label="The card" style={{ borderRadius: 18, background: C.panel, border: `1px solid ${C.line}`, padding: 22, display: "grid", gridTemplateColumns: "minmax(140px, 200px) minmax(0, 1fr)", gap: 28, alignItems: "start" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={card.imageUrl || cardTemplate(card.name)} alt={card.imageUrl ? `${card.name} card` : "Card image not defined yet"} style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 12, transform: "rotate(-3deg)", boxShadow: "0 24px 40px -22px rgba(0,0,0,.8)" }} />
+              <div style={{ display: "grid", gap: 10, justifyItems: "center" }}>
+                <img src={card.imageUrl || cardTemplate(card.name)} alt={card.imageUrl ? `${card.name} card` : "Card image not defined yet"} style={{ width: "100%", aspectRatio: "4 / 5", objectFit: "cover", borderRadius: 12, transform: "rotate(-3deg)", boxShadow: "0 24px 40px -22px rgba(0,0,0,.8)" }} />
+                <label style={{ ...btn(), height: 30, fontSize: 12, marginTop: 6 }} title="JPG, PNG or WebP, 4:5 (1080 × 1350), up to 4 MB. Goes into the staging media library.">
+                  {busy === "image" ? "Uploading …" : card.imageUrl ? "Replace image" : "Add card image"}
+                  <input type="file" accept="image/*" hidden onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setBusy("image");
+                    const fd = new FormData();
+                    fd.append("file", f);
+                    const j = await fetch(`/api/teamcards/${card.id}/image`, { method: "POST", body: fd }).then((r) => r.json()).catch(() => ({ error: "upload failed" }));
+                    setBusy(null);
+                    if (j.error) return setImgErr(j.error);
+                    setImgErr(null);
+                    setCard({ ...card, imageUrl: j.imageUrl });
+                    setRow(row ? { ...row, imageUrl: j.imageUrl, check: { ...row.check, missing: (row.check?.missing ?? []).filter((m: string) => m !== "Card image") } } : row);
+                  }} />
+                </label>
+                {imgErr && <span role="alert" style={{ fontSize: 12, color: "#e06c5b", textAlign: "center" }}>{imgErr}</span>}
+              </div>
               <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   {meta.core && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: C.lava, color: "#fff" }}>CORE</span>}

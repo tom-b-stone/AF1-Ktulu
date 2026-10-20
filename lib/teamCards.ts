@@ -411,3 +411,26 @@ export async function setCardType(ids: string[], type: { id: string; title: stri
   await saveCards(cards);
   return { done, errors };
 }
+
+// ---- card image ------------------------------------------------------------------
+// A new card artwork (e.g. exported from the Figma Team Cards board) goes into
+// the staging media library; the card shows it at once, and a card that is on
+// staging gets it as its badge image too.
+export async function setCardImage(id: string, file: Blob, filename: string, by: string, source = "upload") {
+  const { listMediaFolders, uploadMedia } = await import("./payloadClient");
+  const cards = await listCards();
+  const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  if (!card) throw new Error("card not found");
+  const race = String(card.brief?.race ?? card.raceLabel ?? "");
+  const folders = await listMediaFolders().catch(() => []);
+  const want = race ? new RegExp(race.normalize("NFD").replace(/[̀-ͯ]/g, "").split(/\s+/)[0], "i") : null;
+  const folder = (want && folders.find((f) => want.test(f.name.normalize("NFD").replace(/[̀-ͯ]/g, "")))) || folders.find((f) => /team ?card|badge/i.test(f.name)) || null;
+  const media = await uploadMedia(file, filename, `Team Card: ${card.name}`, folder?.id ?? null);
+  if (card.staging.badgeId) await stg(`/badges/${card.staging.badgeId}`, { method: "PATCH", body: JSON.stringify({ badgeImage: media.id }) });
+  card.imageUrl = `/api/sitemap/media/${media.id}`;
+  card.brief = { ...(card.brief ?? {}), imageId: media.id };
+  card.updatedAt = new Date().toISOString();
+  card.log = [{ at: card.updatedAt, by, summary: `Card image from ${source}${card.staging.badgeId ? " (also on the staging card)" : ""}` }, ...card.log].slice(0, 50);
+  await saveCards(cards);
+  return { imageUrl: card.imageUrl, mediaId: media.id, folder: folder?.name ?? null };
+}
