@@ -78,10 +78,19 @@ export async function blueprints(tplIn?: Record<string, Json>): Promise<Blueprin
     }
     for (const i of [0, 1]) if (!seen.has(`@btn:${i}`) && Array.isArray(s.ctas)) fields.push({ path: `ctas.${i}.label`, layer: `@btn:${i}`, kind: "text" });
     // carousels: up to five tiles, even when the template has fewer
+    const add = (path: string, layer: string, kind: "text" | "image") => {
+      if (!seen.has(layer)) fields.push({ path, layer, kind });
+      seen.add(layer);
+    };
     if (type === "carousel")
-      for (let i = 0; i < 5; i++)
-        for (const [p, l] of [["headline", "Headline"], ["copy", "Copy"]] as const)
-          if (!seen.has(`Tile ${i + 1} · ${l}`)) fields.push({ path: `carouselItems.${i}.carouselImage.${p}`, layer: `Tile ${i + 1} · ${l}`, kind: "text" });
+      for (let i = 0; i < 5; i++) {
+        add(`carouselItems.${i}.carouselImage.headline`, `Tile ${i + 1} · Headline`, "text");
+        add(`carouselItems.${i}.carouselImage.copy`, `Tile ${i + 1} · Copy`, "text");
+        add(`carouselItems.${i}.carouselImage.contentCtas.0.label`, `Tile ${i + 1} · Link 1`, "text");
+        add(`carouselItems.${i}.carouselImage.imagePreview`, `ImageItem${i + 1}>ImageContainer`, "image");
+      }
+    // galleries: up to six images
+    if (type === "gallery") for (let i = 0; i < 6; i++) add(`images.${i}.image.background.imageSettings.media`, `Rectangle 16:9@${i}`, "image");
     out[type] = { name: MODULES[type]?.name ?? type, fields };
   }
   return out;
@@ -111,7 +120,8 @@ function relink(v: Json, to: (path: string) => string, path = ""): Json {
 }
 const linkButton = (label: string) => ({ blockType: "link-button", appearance: { variant: "primary", size: "sm", hug: true }, label, iconPlacement: "after", linkType: "internal", openNewTab: false });
 
-type Ctx = { hubId: string; pageIds: string[]; card?: CardRecord; campaignTagId?: string; contentTagId?: string; isHub: boolean };
+type Ctx = { hubId: string; selfId: string; pageFor: (text: string) => string | undefined; cardFor: (text: string) => CardRecord | undefined; card?: CardRecord; campaignTagId?: string; contentTagId?: string; isHub: boolean };
+const textOf = (o: Json) => (o ? [o.headline, o.subline, o.copy].filter((x) => typeof x === "string").join(" ") : "");
 function buildBlock(tpl: Json, bp: Blueprints[string], m: FigmaModule, ctx: Ctx, notes: string[]): Json | null {
   const s: Json = blank(noIds(clone(tpl)));
   delete s.blockName;
@@ -124,11 +134,18 @@ function buildBlock(tpl: Json, bp: Blueprints[string], m: FigmaModule, ctx: Ctx,
     const base = s.carouselItems[0];
     s.carouselItems = Array.from({ length: n }, (_, i) => clone(s.carouselItems[i] ?? base));
   }
+  // galleries: as many images as the design shows
+  if (m.blockType === "gallery" && Array.isArray(s.images) && s.images.length) {
+    const n = Math.max(1, ...Object.keys(m.images).map((k) => Number(/@(\d+)$/.exec(k)?.[1] ?? -1) + 1));
+    const base = s.images[0];
+    s.images = Array.from({ length: n }, (_, i) => clone(s.images[i] ?? base));
+  }
   if (Array.isArray(s.ctas)) s.ctas = [];
   for (const f of bp.fields) {
     if (f.kind === "image") {
       const id = m.images[f.layer];
-      if (id) setPath(s, f.path, id);
+      const at = /^(images|carouselItems)\.(\d+)\./.exec(f.path);
+      if (id && !(at && !s[at[1]]?.[Number(at[2])])) setPath(s, f.path, id);
       continue;
     }
     const v = (m.texts[f.layer] ?? "").trim();
@@ -146,6 +163,13 @@ function buildBlock(tpl: Json, bp: Blueprints[string], m: FigmaModule, ctx: Ctx,
     setPath(s, f.path, v);
   }
   for (const k of ["ctas", "unearnedBadgeCTA", "earnedBadgeCTA"]) if (Array.isArray(s[k])) s[k] = s[k].filter((x: Json) => x && x.label);
+  // tile links: a label without a button around it gets one, empty ones go
+  if (Array.isArray(s.carouselItems))
+    for (const it of s.carouselItems) {
+      const ci = it?.carouselImage;
+      if (!ci) continue;
+      ci.contentCtas = (Array.isArray(ci.contentCtas) ? ci.contentCtas : []).filter((x: Json) => x && x.label).map((x: Json) => (x.blockType ? x : { ...linkButton(x.label), appearance: { variant: "secondary", size: "sm", hug: true } }));
+    }
   // per type
   const t = m.blockType;
   if (t === "hot-spot") {
@@ -153,11 +177,13 @@ function buildBlock(tpl: Json, bp: Blueprints[string], m: FigmaModule, ctx: Ctx,
     notes.push("hotspots left empty: set them in the CMS");
   }
   if (t === "single-card-showcase" || t === "badge-engagement-teaser") {
-    if (!ctx.card?.staging.badgeId) {
-      notes.push(`${MODULES[t]?.name ?? t} skipped: no Team Card for this page yet`);
+    // the page's own card; on the hub the card the module talks about
+    const card = ctx.isHub ? ctx.cardFor(Object.values(m.texts).join(" ")) : ctx.card;
+    if (!card?.staging.badgeId) {
+      notes.push(`${MODULES[t]?.name ?? t} skipped: no Team Card ${ctx.isHub ? "matches its text" : "for this page yet"}`);
       return null;
     }
-    s.badge = ctx.card.staging.badgeId;
+    s.badge = card.staging.badgeId;
   }
   if (t === "badge-engagement-teaser") {
     const kids: Json[] = (s.children ?? []).filter((c: Json) => c.blockType !== "engagement");
@@ -167,16 +193,17 @@ function buildBlock(tpl: Json, bp: Blueprints[string], m: FigmaModule, ctx: Ctx,
   if (t === "badges-grid") s.loyaltyCategoryTagsList = ctx.campaignTagId ? [{ loyaltyCategoryTags: [{ relationTo: "loyalty-category-tags", value: ctx.campaignTagId }] }] : [];
   if (t === "carousel-tags" && s.carouselItems) s.carouselItems.contentTagsList = ctx.contentTagId ? [{ contentTags: [ctx.contentTagId] }] : [];
   if (typeof s.backgroundColor === "string" && /singapore/i.test(s.backgroundColor)) s.backgroundColor = "graphite";
-  // links: tiles on the hub lead to the landing pages in order, everything else to the hub
+  // links: a tile or teaser about another page leads there (by its words), everything else to the hub
+  const blockTarget = t === "call-to-action" || t === "hero" ? undefined : ctx.pageFor(textOf(s) + " " + Object.values(m.texts).join(" "));
   return relink(s, (path) => {
     const tile = /^carouselItems\.(\d+)\./.exec(path);
-    if (ctx.isHub && tile && ctx.pageIds[Number(tile[1])]) return ctx.pageIds[Number(tile[1])];
-    return ctx.isHub && ctx.pageIds[0] && t === "single-card-showcase" ? ctx.pageIds[0] : ctx.hubId;
+    const to = tile ? ctx.pageFor(textOf(s.carouselItems?.[Number(tile[1])]?.carouselImage) + " " + (m.texts[`Tile ${Number(tile[1]) + 1} · Link 1`] ?? "")) : blockTarget;
+    return to && to !== ctx.selfId ? to : ctx.hubId;
   });
 }
 
 // the campaign's Team Card for a page, by the words of its name
-const STOP = new Set(["special", "sao", "paulo", "the", "s", "team", "card", "of", "and", "page", "landing", "collection", "design", "2026"]);
+const STOP = new Set(["special", "sao", "paulo", "the", "s", "team", "card", "of", "and", "page", "landing", "collection", "design", "2026", "race", "grand", "prix", "weekend", "brazilian", "brazil", "explore", "your", "now", "more", "with", "for"]);
 const words = (t: string) => new Set(plain(t).split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w)));
 function matchCard(name: string, cards: CardRecord[]): CardRecord | undefined {
   const want = words(name);
@@ -261,7 +288,17 @@ export async function buildPagesFromFigma(campaign: string, pages: FigmaPage[], 
 
   // 2 the modules
   const hubId = hubPage ? ids[hubPage.name] : order.map((p) => ids[p.name]).find(Boolean)!;
-  const landing = order.filter((p) => p !== hubPage).map((p) => ids[p.name]).filter(Boolean);
+  // which landing page a text talks about: words of the page name and of its card
+  const targets = order.filter((p) => p !== hubPage && ids[p.name]).map((p) => ({ id: ids[p.name], words: new Set([...words(p.name), ...words(matchCard(p.name, campCards)?.name ?? "")]) }));
+  const pageFor = (text: string) => {
+    const w = words(text);
+    let best: { id: string; n: number } | undefined;
+    for (const x of targets) {
+      const n = [...x.words].filter((k) => w.has(k)).length;
+      if (n && (!best || n > best.n)) best = { id: x.id, n };
+    }
+    return best?.id;
+  };
   const out: BuiltPage[] = [];
   const cardIds: string[] = [];
   for (const p of order) {
@@ -277,7 +314,7 @@ export async function buildPagesFromFigma(campaign: string, pages: FigmaPage[], 
         notes.push(`${m.name}: no ${m.blockType} module on staging to start from, skipped`);
         continue;
       }
-      const s = buildBlock(t, bp, m, { hubId, pageIds: landing, card, campaignTagId, contentTagId, isHub: p === hubPage }, notes);
+      const s = buildBlock(t, bp, m, { hubId, selfId: id, pageFor, cardFor: (x) => matchCard(x, campCards), card, campaignTagId, contentTagId, isHub: p === hubPage }, notes);
       if (s) sections.push(s);
     }
     await stg(`/pages/${id}?draft=true&locale=en`, { method: "PATCH", body: JSON.stringify({ sections, _status: "draft" }) });
