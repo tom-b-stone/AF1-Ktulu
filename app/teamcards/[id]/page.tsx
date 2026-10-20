@@ -523,7 +523,7 @@ export default function EditCard() {
         };
         const how = HOW[row?.mechanic ?? ""] ?? (kind === "qa" ? HOW["q-and-a"] : kind === "hot" ? HOW["hot-or-not"] : row?.mechanic ? HOW.survey : "");
         const earn = how
-          ? `Fans ${how}${placement ? ` (${placement.replace(/^[^·]*·\s*/, "")})` : ""}${question ? `: "${question.length > 110 ? question.slice(0, 110) + "…" : question}"` : ""}. ${reward ? `They get ${reward}.` : "No reward is set yet."}`
+          ? `Fans ${how}${placement ? ` (${placement.replace(/^[^·]*·\s*/, "")})` : ""}${question && !/^(page|link)$/.test(row?.mechanic ?? "") ? `: "${question.length > 110 ? question.slice(0, 110) + "…" : question}"` : ""}. ${reward ? `They get ${reward}.` : "No reward is set yet."}`
           : "How fans earn this card is not defined yet.";
         const last = row?.log?.[0] ? `${row.log[0].summary} · ${new Date(row.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "No changes logged";
         const lbl: CSSProperties = { fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: C.mute };
