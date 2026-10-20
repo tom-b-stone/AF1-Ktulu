@@ -16,7 +16,6 @@ export const TOOLS: { href: string; key: string; name: string; status: "working"
   { href: "/assets", key: "/assets", name: "Asset Uploader", status: "working", text: "Compress, name, alt text, upload" },
   { href: "/photobook", key: "/photobook", name: "GP Mini-Zine", status: "staging", text: "GP zine to print, fold and colour in + fan page" },
   { href: "/teamcards", key: "/teamcards", name: "Team Card Configurator", status: "staging", text: "Cards, guided edit, journey preview, helper" },
-  { href: "/figma", key: "/figma", name: "Figma Sync", status: "working", text: "Figma ↔ staging CMS, plugin for every campaign board" },
   { href: "/images", key: "/images", name: "CRM Images", status: "planned", text: "Email template image variants" },
   { href: "https://af1-utm-studio.vercel.app/", key: "/utm", name: "UTM Studio", status: "external", external: true, text: "Campaign links (own app)" },
 ];
@@ -27,6 +26,13 @@ export const STATUS_STYLE: Record<string, { fg: string; border: string; bg: stri
   planned: { fg: "var(--vapor-lilac)", border: "rgba(112,86,167,0.45)", bg: "rgba(112,86,167,0.14)" },
   external: { fg: "var(--vapor-lilac)", border: "rgba(112,86,167,0.45)", bg: "rgba(112,86,167,0.14)" },
 };
+
+// Team Cards also opens for people who only have Figma Sync: straight to that page
+export function toolLink(t: (typeof TOOLS)[number], role: Role | undefined, tools: string[] | null) {
+  if (canUseTool(role, t.key, tools)) return t;
+  if (t.key === "/teamcards" && canUseTool(role, "/figma", tools)) return { ...t, href: "/teamcards/figma" };
+  return null;
+}
 
 export function currentTool(pathname: string) {
   if (pathname.startsWith("/admin")) return { href: "/admin", key: "/admin", name: "Admin", status: "working" as const, text: "" };
@@ -97,7 +103,7 @@ export default function ToolHeader() {
         {/* Tools: a row of rotating 3D icons. Hover extends the pill
             horizontally and reveals the name; the current tool stays open. */}
         <nav aria-label="Tools" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
-          {TOOLS.filter((t) => canUseTool((session.user as { role?: Role } | undefined)?.role, t.key, (session.user as { tools?: string[] | null } | undefined)?.tools ?? null)).map((t) => {
+          {TOOLS.map((t) => toolLink(t, (session.user as { role?: Role } | undefined)?.role, (session.user as { tools?: string[] | null } | undefined)?.tools ?? null)).filter((t): t is (typeof TOOLS)[number] => !!t).map((t) => {
             const active = tool?.key === t.key;
             const preset = MORPH_PRESETS[t.key] ?? {};
             const inner = (

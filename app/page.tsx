@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { toolLink } from "./components/ToolHeader";
 import { RELEASE, STATUS_LABEL, canUseTool, type ReleaseStatus, type Role } from "@/lib/toolAccess";
 import HomeBackground, { useBackgroundChoice } from "./components/HomeBackground";
 import HomeFooter from "./components/HomeFooter";
@@ -43,12 +44,6 @@ const TILES: { title: string; href: string; key: string; external?: boolean; tex
     href: "/teamcards",
     key: "/teamcards",
     text: "All Team Cards, guided editing with a live journey preview, and a helper for bulk changes in EN and DE.",
-  },
-  {
-    title: "Figma Sync",
-    href: "/figma",
-    key: "/figma",
-    text: "The Figma plugin: campaign pages from staging on one board per campaign, text changes back to the CMS.",
   },
   {
     title: "CRM Images",
@@ -112,18 +107,23 @@ export default function Home() {
         <span>{TILES.length}</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 26, rowGap: 34 }}>
-        {TILES.map((t, i) => (
-          <div key={t.key} className={`reveal reveal-d${(i % 6) + 1}`} style={{ display: "flex" }}>
-            <HomeTile
-              title={t.title}
-              href={canUseTool(role, t.key, tools) ? t.href : undefined}
-              tileKey={t.key}
-              external={t.external}
-              status={STATUS[RELEASE[t.key]?.status ?? "dev"]}
-              text={canUseTool(role, t.key, tools) ? t.text : `${t.text} Opens for the test group once it is ready to test.`}
-            />
-          </div>
-        ))}
+        {TILES.map((t, i) => {
+          const full = canUseTool(role, t.key, tools);
+          // Team Cards: people with only Figma Sync open that part
+          const figmaOnly = !full && t.key === "/teamcards" && !!toolLink({ href: t.href, key: t.key, name: t.title, status: "staging", text: t.text }, role, tools);
+          return (
+            <div key={t.key} className={`reveal reveal-d${(i % 6) + 1}`} style={{ display: "flex" }}>
+              <HomeTile
+                title={t.title}
+                href={full ? t.href : figmaOnly ? "/teamcards/figma" : undefined}
+                tileKey={t.key}
+                external={t.external}
+                status={STATUS[RELEASE[figmaOnly ? "/figma" : t.key]?.status ?? "dev"]}
+                text={full ? t.text : figmaOnly ? "Figma Sync: the Figma plugin and campaign boards. The card editor opens for the test group once it is ready to test." : `${t.text} Opens for the test group once it is ready to test.`}
+              />
+            </div>
+          );
+        })}
       </div>
       <div className="reveal reveal-d5" style={{ marginTop: 34 }}>
         <SuggestionTile />

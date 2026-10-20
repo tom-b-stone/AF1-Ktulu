@@ -5,7 +5,7 @@ import { MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, 
 // Endpoint for the "AF1 Ktulu Sync" Figma plugin (figma-plugin/ in this
 // repo). The plugin runs in Figma's sandbox (origin "null"), so it can't
 // carry the session cookie: it authenticates with a personal plugin token in
-// the path (Figma Sync → "Create plugin token").
+// the path (Team Cards → Figma Sync → "Create plugin token").
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,7 +16,7 @@ const CORS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: CORS });
-const NO_TOKEN = "Unknown token. Create one in the AF1 Tool under Figma Sync.";
+const NO_TOKEN = "Unknown token. Create one in the AF1 Tool under Team Cards → Figma Sync.";
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS });

@@ -26,7 +26,7 @@
 <p id="sub">Figma, the AF1 Tool and staging stay in the same state.</p>
 
 <div id="tokenBox" hidden>
-  <p>Paste your plugin token (af1-ktulu.vercel.app/figma → "Create plugin token").</p>
+  <p>Paste your plugin token (af1-ktulu.vercel.app/teamcards/figma → "Create plugin token").</p>
   <div class="row"><input type="text" id="token" placeholder="token" /><button class="primary" id="saveToken">Connect</button></div>
 </div>
 
@@ -70,8 +70,8 @@
 
   function render(m) {
     $("tokenBox").hidden = true; $("main").hidden = false;
-    if (m.pick) { $("status").innerHTML = "<strong>Pick the campaign of this board</strong> (top right). Boards are set on af1-ktulu.vercel.app/figma."; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
-    if (m.wrong) { $("status").innerHTML = `<div class="warn"><strong>This file is not the board of ${esc(m.name)}.</strong><br>Nothing is built or synced here. ${m.boardUrl ? `Open <a href="${esc(m.boardUrl)}" target="_blank">its board</a>, pick another campaign, or` : "Pick another campaign or"} set this file as its board on af1-ktulu.vercel.app/figma.</div>`; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
+    if (m.pick) { $("status").innerHTML = "<strong>Pick the campaign of this board</strong> (top right). Boards are set on af1-ktulu.vercel.app/teamcards/figma."; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
+    if (m.wrong) { $("status").innerHTML = `<div class="warn"><strong>This file is not the board of ${esc(m.name)}.</strong><br>Nothing is built or synced here. ${m.boardUrl ? `Open <a href="${esc(m.boardUrl)}" target="_blank">its board</a>, pick another campaign, or` : "Pick another campaign or"} set this file as its board on af1-ktulu.vercel.app/teamcards/figma.</div>`; $("buildBox").innerHTML = $("changes").innerHTML = $("stale").innerHTML = ""; return; }
     $("live").checked = m.live;
     const st = m.stale || [];
     $("stale").innerHTML = st.length ? `<div class="warn"><strong>${st.length} text${st.length === 1 ? "" : "s"} changed on one screen only</strong><br>` +

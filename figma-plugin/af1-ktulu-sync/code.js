@@ -12,7 +12,7 @@
 //   page frame : { type:"page", url, stagingId }
 //   module/card: { type:"block"|"card", fields:[{key,layer,kind}], last:{}, imgs:{} }
 //
-// One Figma board per campaign (set on af1-ktulu.vercel.app/figma): the plugin
+// One Figma board per campaign (set on af1-ktulu.vercel.app/teamcards/figma): the plugin
 // picks the campaign whose board is this file. The choice is kept in the file
 // (shared plugin data "af1"/"campaign") when Figma doesn't tell the file key.
 // A text changed on a mobile screen goes to the CMS and from there onto every
@@ -340,7 +340,7 @@ function sendCampaigns() {
   send("campaigns", { list: state.campaigns.map(function (x) { return { key: x.key, name: x.name, figmaUrl: x.figmaUrl, board: !!x.figmaFile }; }), current: state.campaign, wrong: wrongBoard(), boardUrl: c ? c.figmaUrl : "", fileKnown: !!fileKey() });
 }
 async function goToCampaignPage() {
-  if (wrongBoard()) throw new Error("This file is not the Figma board of " + camp().name + ". Open its board, or change the board on af1-ktulu.vercel.app/figma.");
+  if (wrongBoard()) throw new Error("This file is not the Figma board of " + camp().name + ". Open its board, or change the board on af1-ktulu.vercel.app/teamcards/figma.");
   var id = state.data && state.data.campaign && state.data.campaign.figmaPage;
   var page = id ? await figma.getNodeByIdAsync(id) : null;
   if (!(page && page.type === "PAGE")) {

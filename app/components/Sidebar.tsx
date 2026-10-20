@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { currentTool } from "./ToolHeader";
+import { blockedPath, type Role } from "@/lib/toolAccess";
 import { useSidebarSlot } from "./SidebarSlot";
 
 // In-tool navigation. Switching between tools happens in the header's Tools
@@ -49,7 +50,9 @@ const SIDEBARS: Record<string, Section[]> = {
       title: "Team Cards",
       entries: [
         { href: "/teamcards", label: "All cards", hint: "Edit texts and see the whole journey", exact: true },
-        { href: "/figma", label: "Figma Sync", hint: "Figma ↔ CMS changes, boards, plugin" },
+        { href: "/teamcards/figma", label: "Figma Sync", hint: "Figma ↔ CMS changes, boards, plugin", exact: true },
+        { href: "/teamcards/figma#boards", label: "Campaign boards", hint: "One Figma board per campaign" },
+        { href: "/teamcards/figma#plugin", label: "Install the plugin", hint: "Figma desktop, 2 minutes" },
       ],
     },
     {
@@ -57,16 +60,6 @@ const SIDEBARS: Record<string, Section[]> = {
       entries: [
         { href: "https://www.figma.com/design/rGxt5J0qhiK759uEbaKgTO/WorkingDoc?node-id=692-56", label: "Figma file", note: "↗", hint: "Opens in the Figma app" },
         { href: "https://staging.audif1team.com/cms/admin/collections/badges", label: "Cards in the CMS", note: "↗", hint: "Staging admin" },
-      ],
-    },
-  ],
-  "/figma": [
-    {
-      title: "Figma Sync",
-      entries: [
-        { href: "/figma", label: "Changes", hint: "What changed where; approve it", exact: true },
-        { href: "/figma#boards", label: "Campaign boards", hint: "One Figma board per campaign" },
-        { href: "/figma#plugin", label: "Install the plugin", hint: "Figma desktop, 2 minutes" },
       ],
     },
   ],
@@ -93,6 +86,8 @@ export default function Sidebar() {
   if (pathname === "/login" || pathname === "/" || !session) return null;
 
   const tool = currentTool(pathname);
+  const role = (session.user as { role?: Role } | undefined)?.role;
+  const tools = (session.user as { tools?: string[] | null } | undefined)?.tools ?? null;
   const sections = (tool && SIDEBARS[tool.key]) ?? [];
   if (sections.length === 0 && !slot) return null;
 
@@ -126,7 +121,7 @@ export default function Sidebar() {
             {sec.title}
           </div>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 2 }}>
-            {sec.entries.map((e) => {
+            {sec.entries.filter((e) => e.href.startsWith("http") || !blockedPath(role, e.href.split(/[?#]/)[0], tools)).map((e) => {
               const external = e.href.startsWith("http") || e.href.startsWith("/api/");
               const active = e.exact ? pathname === e.href : !external && pathname.startsWith(e.href.split("?")[0]) && e.href.split("?")[0] !== tool?.key;
               const style = {

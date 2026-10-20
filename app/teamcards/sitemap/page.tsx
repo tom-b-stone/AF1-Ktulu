@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// moved: the Figma sync is its own tool now (open to everyone)
+// moved: Figma Sync is under Team Cards now
 export default function Page() {
-  redirect("/figma");
+  redirect("/teamcards/figma");
 }

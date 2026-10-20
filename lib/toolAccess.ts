@@ -24,7 +24,7 @@ export const TOOL_LABEL: Record<string, string> = {
   "/seo": "SEO Studio",
   "/photobook": "GP Mini-Zine",
   "/teamcards": "Team Cards",
-  "/figma": "Figma Sync",
+  "/figma": "Team Cards · Figma Sync",
   "/images": "CRM Images",
 };
 
@@ -34,8 +34,8 @@ export const RELEASE: Record<string, { status: ReleaseStatus; paths: string[]; m
   "/seo": { status: "test", paths: ["/seo", "/api/seo"], mcp: /^seo_/ },
   "/photobook": { status: "test", paths: ["/photobook", "/api/photobook", "/api/zine"] },
   "/teamcards": { status: "dev", paths: ["/teamcards", "/api/teamcards", "/api/captures"], mcp: /^(teamcard_|sitecopy_)/ },
-  // the Figma plugin and its page: everyone who can sign in (the plugin authenticates with a personal token)
-  "/figma": { status: "live", paths: ["/figma", "/api/sitemap"], mcp: /^sitemap_/ },
+  // Figma Sync inside Team Cards (plugin + its page): everyone who can sign in (the plugin authenticates with a personal token)
+  "/figma": { status: "live", paths: ["/teamcards/figma", "/figma", "/api/sitemap"], mcp: /^sitemap_/ },
   "/images": { status: "plan", paths: ["/images"] },
 };
 
@@ -67,9 +67,11 @@ export function defaultTesterTools(): string[] {
 // For the middleware: is this path part of a tool the person may not open?
 export function blockedPath(role: Role | undefined, pathname: string, tools?: string[] | null): boolean {
   if (role === "admin") return false;
+  // the most specific path wins (/teamcards/figma belongs to Figma Sync, not to Team Cards)
+  let hit: { key: string; len: number } | null = null;
   for (const [key, r] of Object.entries(RELEASE))
-    if (r.paths.some((p) => pathname === p || pathname.startsWith(p + "/"))) return !canUseTool(role, key, tools);
-  return false;
+    for (const p of r.paths) if ((pathname === p || pathname.startsWith(p + "/")) && (!hit || p.length > hit.len)) hit = { key, len: p.length };
+  return hit ? !canUseTool(role, hit.key, tools) : false;
 }
 
 // For the connector: may this person call that MCP tool? Tools no release claims stay admin-only.
