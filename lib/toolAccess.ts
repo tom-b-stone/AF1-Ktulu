@@ -21,8 +21,8 @@ export const STATUS_LABEL: Record<ReleaseStatus, string> = {
 export const RELEASE: Record<string, { status: ReleaseStatus; paths: string[]; mcp?: RegExp }> = {
   "/utm": { status: "live", paths: ["/utm"] },
   "/assets": { status: "test", paths: ["/assets", "/api/assets"], mcp: /^(asset_|library_|knowledge_|learn_person$)/ },
-  "/seo": { status: "dev", paths: ["/seo", "/api/seo"], mcp: /^seo_/ },
-  "/photobook": { status: "dev", paths: ["/photobook", "/api/photobook", "/api/zine"] },
+  "/seo": { status: "test", paths: ["/seo", "/api/seo"], mcp: /^seo_/ },
+  "/photobook": { status: "test", paths: ["/photobook", "/api/photobook", "/api/zine"] },
   "/teamcards": { status: "dev", paths: ["/teamcards", "/api/teamcards", "/api/sitemap", "/api/captures"], mcp: /^(teamcard_|sitemap_|sitecopy_)/ },
   "/images": { status: "plan", paths: ["/images"] },
 };
