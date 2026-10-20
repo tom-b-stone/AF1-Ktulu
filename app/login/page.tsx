@@ -5,6 +5,7 @@
 // it the living Ktulu ASCII field; the AF1-KTULU wordmark flickers through
 // fonts and settles. Covers the app chrome (header, sidebar) while signed out.
 import { Suspense, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import KtuluLogo from "../components/KtuluLogo";
@@ -58,6 +59,10 @@ function SignIn() {
 
 export default function LoginPage() {
   const [h, setH] = useState(0);
+  // rendered into <body>: <main> animates with a transform, which would turn
+  // position:fixed into "fixed inside main" and leave a strip at the bottom
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => setHost(document.body), []);
   useEffect(() => {
     const on = () => setH(window.innerHeight);
     on();
@@ -65,7 +70,8 @@ export default function LoginPage() {
     return () => window.removeEventListener("resize", on);
   }, []);
 
-  return (
+  if (!host) return null;
+  return createPortal(
     <div className="ktulu-gate">
       <style>{`
         .ktulu-gate { position: fixed; inset: 0; z-index: 2000; display: flex; flex-direction: column; overflow: hidden; background: #000; color: #f5f5f5; font-family: "DM Sans", "Archivo", system-ui, sans-serif; }
@@ -119,6 +125,7 @@ export default function LoginPage() {
         <span>© {new Date().getFullYear()} SLASH.DIGITAL · München</span>
         <span>Internal, not for distribution. All trademarks belong to their owners.</span>
       </footer>
-    </div>
+    </div>,
+    host
   );
 }
