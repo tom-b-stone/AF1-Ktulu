@@ -4,11 +4,13 @@
 // check, pick the new cards, import. Never writes to the tracker.
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import { createPortal } from "react-dom";
+import { SideButton } from "@/app/components/SidebarSlot";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 type Card = { id: string; name: string; status: string; copyStatus: string; race?: string; match?: { cardId: string; reason: string } };
 
-export default function TrackerImport({ onDone }: { onDone: () => void }) {
+export default function TrackerImport({ onDone, side }: { onDone: () => void; side?: boolean }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [needGoogle, setNeedGoogle] = useState(false);
@@ -53,10 +55,16 @@ export default function TrackerImport({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <button className="btn" onClick={() => void preview()} title="Reads the ARF1 Team Cards Tracker (read only) and adds cards that are not in Ktulu yet">
-        Import from tracker
-      </button>
-      {open && (
+      {side ? (
+        <SideButton onClick={() => void preview()} note="one way">
+          Import from tracker
+        </SideButton>
+      ) : (
+        <button className="btn" onClick={() => void preview()} title="Reads the ARF1 Team Cards Tracker (read only) and adds cards that are not in Ktulu yet">
+          Import from tracker
+        </button>
+      )}
+      {open && createPortal(
         <div role="dialog" aria-modal="true" aria-label="Import from the Team Cards Tracker" onClick={(e) => e.target === e.currentTarget && !busy && setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", padding: 16 }}>
           <div className="card" style={{ width: "min(760px, 100%)", maxHeight: "86vh", overflow: "auto", padding: 22, background: "var(--bg-2)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
@@ -124,7 +132,7 @@ export default function TrackerImport({ onDone }: { onDone: () => void }) {
             )}
           </div>
         </div>
-      )}
+        , document.body)}
     </>
   );
 }

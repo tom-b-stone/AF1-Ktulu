@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Replace from "./Replace";
 import TrackerImport from "./TrackerImport";
+import { SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
 
 type Row = {
@@ -63,10 +64,11 @@ function Stat({ n, label, tone, active, onClick }: { n: number; label: string; t
   return (
     <button
       onClick={onClick}
-      style={{ textAlign: "left", padding: "12px 14px", borderRadius: 10, border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`, background: "var(--bg-2)", color: "inherit", cursor: onClick ? "pointer" : "default", minWidth: 120 }}
+      className="tc-stat"
+      style={{ textAlign: "left", padding: "10px 14px", borderRadius: 10, border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`, background: "var(--bg-2)", color: "inherit", cursor: onClick ? "pointer" : "default", display: "grid", gap: 2 }}
     >
-      <div style={{ fontFamily: "var(--font-heading)", fontSize: 26, fontWeight: 800, color: tone }}>{n}</div>
-      <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontFamily: "var(--font-heading)", fontSize: 24, fontWeight: 800, lineHeight: 1.1, color: tone, fontVariantNumeric: "tabular-nums" }}>{n}</div>
+      <div style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }}>{label}</div>
     </button>
   );
 }
@@ -87,6 +89,13 @@ export default function Page() {
   useEffect(() => {
     void load();
   }, []);
+  // temporary until the tracker is retired: the one-way import sits in the left menu
+  useSidebarContent(
+    <SideSection title="Tracker · temporary">
+      <TrackerImport side onDone={() => void load()} />
+    </SideSection>,
+    [],
+  );
 
   const opts = useMemo(() => {
     const u = (f: (c: Row) => string) => [...new Set((cards ?? []).map(f))].sort();
@@ -203,39 +212,50 @@ export default function Page() {
     { key: "edit", header: "", width: "80px", cell: (c) => <Link className="btn btn-primary" href={`/teamcards/${c.id}`}>Edit</Link> },
   ];
 
+  const chip = { padding: "3px 10px", fontSize: 12, borderRadius: 999 } as const;
   return (
-    <div style={{ display: "grid", gap: 20, maxWidth: 1600 }}>
-      <div>
-        <h1 style={{ margin: "0 0 6px" }}>Team Cards</h1>
-        <p style={{ color: "var(--muted)", margin: 0 }}>Every card with its texts, journey and staging links. Open a card to edit it step by step in the real frontend views, or change wording on many cards at once with search and replace.</p>
-      </div>
+    <div style={{ display: "grid", gap: 24, maxWidth: 1600 }}>
+      <style>{`.tc-stat{transition:border-color .15s,transform .15s}.tc-stat:active{transform:scale(.98)}`}</style>
+      <header style={{ display: "grid", gap: 6, maxWidth: 760 }}>
+        <h1 style={{ margin: 0 }}>Team Cards</h1>
+        <p style={{ color: "var(--muted)", margin: 0, fontSize: 14, lineHeight: 1.5 }}>Every card with its texts, journey and staging links. Open a card to edit it step by step in the real frontend views.</p>
+      </header>
 
-      {error && <div style={{ color: "#e06c5b" }}>{error}</div>}
-      {!cards && !error && <div style={{ color: "var(--muted)" }}>Loading cards…</div>}
+      {error && <div role="alert" style={{ color: "#e06c5b" }}>{error}</div>}
+      {!cards && !error && (
+        <div aria-busy="true" style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, maxWidth: 760 }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} style={{ height: 62, borderRadius: 10, background: "var(--bg-2)", opacity: 0.6 }} />
+            ))}
+          </div>
+          <div style={{ height: 360, borderRadius: 12, background: "var(--bg-2)", opacity: 0.4 }} />
+        </div>
+      )}
 
       {cards && (
         <section aria-label="Summary" style={{ display: "grid", gap: 12 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, maxWidth: 760 }}>
             <Stat n={summary.total} label="Team Cards" active={!filtered} onClick={reset} />
             <Stat n={summary.ready} label="Ready" tone="#7fd6a2" active={fQuick === "Ready"} onClick={() => setFQuick(fQuick === "Ready" ? ALL : "Ready")} />
             <Stat n={summary.missing} label="Need attention" tone="#ff9a84" active={fQuick === "Missing"} onClick={() => setFQuick(fQuick === "Missing" ? ALL : "Missing")} />
             {summary.disabled > 0 && <Stat n={summary.disabled} label="Disabled" active={fQuick === "Disabled"} onClick={() => setFQuick(fQuick === "Disabled" ? ALL : "Disabled")} />}
             <Stat n={summary.core} label="Core cards" />
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 12, color: "var(--muted)" }}>
+          <div style={{ display: "grid", gap: 8, fontSize: 12, color: "var(--muted)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-              <span>Campaigns:</span>
+              <span style={{ minWidth: 120 }}>Campaigns</span>
               {summary.campaigns.map(([name, n]) => (
-                <button key={name} className="btn" style={{ padding: "2px 10px", fontSize: 12, borderColor: fCampaign === name ? "var(--accent)" : undefined }} onClick={() => setFCampaign(fCampaign === name ? ALL : name)}>
+                <button key={name} className="btn" style={{ ...chip, borderColor: fCampaign === name ? "var(--accent)" : undefined }} onClick={() => setFCampaign(fCampaign === name ? ALL : name)}>
                   {name} · {n}
                 </button>
               ))}
             </div>
             {summary.top.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                <span>Most often missing:</span>
+                <span style={{ minWidth: 120 }}>Most often missing</span>
                 {summary.top.map(([m, n]) => (
-                  <button key={m} className="btn" style={{ padding: "2px 10px", fontSize: 12, color: "#ff9a84", borderColor: q === m ? "var(--accent)" : undefined }} onClick={() => setQ(q === m ? "" : m)}>
+                  <button key={m} className="btn" style={{ ...chip, color: "#ff9a84", borderColor: q === m ? "var(--accent)" : undefined }} onClick={() => setQ(q === m ? "" : m)}>
                     {m} · {n}
                   </button>
                 ))}
@@ -245,16 +265,17 @@ export default function Page() {
         </section>
       )}
 
+      {cards && <Replace cards={cards as never} onApplied={() => void load()} />}
+
       {cards && (
-        <div style={{ display: "grid", gap: 8 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <TrackerImport onDone={() => void load()} />
-            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ID, partner, missing text…" style={{ width: 320 }} aria-label="Search cards" />
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>
+        <section aria-label="All cards" style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by name, ID, partner, missing text…" style={{ width: "min(340px, 100%)" }} aria-label="Filter cards" />
+            <span style={{ fontSize: 12, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
               {shown.length} of {cards.length} cards
             </span>
             {filtered && (
-              <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={reset}>
+              <button className="btn" style={chip} onClick={reset}>
                 Reset filters
               </button>
             )}
@@ -273,9 +294,8 @@ export default function Page() {
               className="rounded-lg border border-border"
             />
           </div>
-        </div>
+        </section>
       )}
-      {cards && <Replace cards={cards as never} onApplied={() => void load()} />}
     </div>
   );
 }

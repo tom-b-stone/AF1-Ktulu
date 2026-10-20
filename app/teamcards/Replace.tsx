@@ -77,16 +77,16 @@ export default function Replace({ cards, onApplied }: { cards: Card[]; onApplied
   };
 
   return (
-    <section id="replace" style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16, display: "grid", gap: 12, background: "var(--surface)" }}>
-      <div>
-        <div style={{ fontWeight: 600 }}>Search and replace</div>
-        <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>Change a word or phrase on every card at once, for example in all module texts. You see every hit, pick the ones to change, check the result, then apply.</div>
+    <section id="replace" aria-label="Search and replace" style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", display: "grid", gap: 10, background: "var(--bg-2)" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <span className="section-label">Search and replace</span>
+        <span style={{ color: "var(--muted)", fontSize: 12 }}>Change wording on every card at once. Pick the hits, check, apply to staging.</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <input className="input" placeholder="Find…" value={find} onChange={(e) => { setFind(e.target.value); setReview(null); setResult(null); }} />
-        <input className="input" placeholder="Replace with…" value={repl} onChange={(e) => { setRepl(e.target.value); setReview(null); }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+        <input className="input" placeholder="Find…" value={find} onChange={(e) => { setFind(e.target.value); setReview(null); setResult(null); }} aria-label="Find" />
+        <input className="input" placeholder="Replace with…" value={repl} onChange={(e) => { setRepl(e.target.value); setReview(null); }} aria-label="Replace with" />
       </div>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 13, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "8px 16px", flexWrap: "wrap", fontSize: 12, alignItems: "center" }}>
         <span style={{ color: "var(--muted)" }}>Languages</span>
         {(["en", "de"] as Loc[]).map((l) => (
           <label key={l} style={{ display: "flex", gap: 4 }}>
@@ -116,10 +116,11 @@ export default function Replace({ cards, onApplied }: { cards: Card[]; onApplied
         </div>
       )}
       {hits.length > 0 && (
+        <div style={{ maxHeight: 280, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
         <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
           <tbody>
             {hits.map((h) => (
-              <tr key={h.id} style={{ borderTop: "1px solid var(--border)", verticalAlign: "top", opacity: off[h.id] ? 0.45 : 1 }}>
+              <tr key={h.id} style={{ borderBottom: "1px solid var(--border)", verticalAlign: "top", opacity: off[h.id] ? 0.45 : 1 }}>
                 <td style={{ padding: 6, width: 24 }}>
                   <input type="checkbox" checked={!off[h.id]} onChange={(e) => setOff((o) => ({ ...o, [h.id]: !e.target.checked }))} />
                 </td>
@@ -135,6 +136,7 @@ export default function Replace({ cards, onApplied }: { cards: Card[]; onApplied
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       {askLang && (
