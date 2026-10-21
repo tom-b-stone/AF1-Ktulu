@@ -205,25 +205,56 @@ let NOTE_W: CGFloat = 400
 let PANEL = CGSize(width: 560, height: 360)
 let MOTION = Animation.spring(response: 0.46, dampingFraction: 0.86)
 
+// the notch's own outline: small concave "ears" at the top, rounded bottom corners
+struct NotchShape: Shape {
+  var ear: CGFloat
+  var bottom: CGFloat
+  var animatableData: AnimatablePair<CGFloat, CGFloat> {
+    get { AnimatablePair(ear, bottom) }
+    set { ear = newValue.first; bottom = newValue.second }
+  }
+  func path(in r: CGRect) -> Path {
+    var p = Path()
+    let w = r.width, h = r.height, e = ear, b = min(bottom, h / 2)
+    p.move(to: CGPoint(x: 0, y: 0))
+    p.addQuadCurve(to: CGPoint(x: e, y: e), control: CGPoint(x: e, y: 0))
+    p.addLine(to: CGPoint(x: e, y: h - b))
+    p.addQuadCurve(to: CGPoint(x: e + b, y: h), control: CGPoint(x: e, y: h))
+    p.addLine(to: CGPoint(x: w - e - b, y: h))
+    p.addQuadCurve(to: CGPoint(x: w - e, y: h - b), control: CGPoint(x: w - e, y: h))
+    p.addLine(to: CGPoint(x: w - e, y: e))
+    p.addQuadCurve(to: CGPoint(x: w, y: 0), control: CGPoint(x: w - e, y: 0))
+    p.closeSubpath()
+    return p
+  }
+}
+
 struct Geometry {
   let notch: CGSize
-  // the shape's frame in the window (origin top left)
+  func ear(_ s: Stage) -> CGFloat { s == .closed ? 6 : 12 }
+  func radius(_ s: Stage) -> CGFloat { s == .open ? 26 : s == .note ? 18 : 9 }
+  // the shape's frame in the window (origin top left), ears included. Closed it sits exactly behind the notch.
   func rect(_ stage: Stage, photos: Bool) -> CGRect {
-    let mid = CANVAS.width / 2
+    let mid = CANVAS.width / 2, e = ear(stage)
     switch stage {
-    case .closed:
-      let left = notch.width / 2 + ICON_W, right = notch.width / 2 + (photos ? 58 : 2)
-      return CGRect(x: mid - left, y: 0, width: left + right, height: notch.height)
-    case .note: return CGRect(x: mid - NOTE_W / 2, y: 0, width: NOTE_W, height: notch.height + 40)
-    case .open: return CGRect(x: mid - PANEL.width / 2, y: 0, width: PANEL.width, height: PANEL.height)
+    case .closed: return CGRect(x: mid - notch.width / 2 - e, y: 0, width: notch.width + 2 * e, height: notch.height)
+    case .note: return CGRect(x: mid - NOTE_W / 2 - e, y: 0, width: NOTE_W + 2 * e, height: notch.height + 40)
+    case .open: return CGRect(x: mid - PANEL.width / 2 - e, y: 0, width: PANEL.width + 2 * e, height: PANEL.height)
     }
   }
-  // where the icon sits: beside the notch, then in the note, then in the panel's header (and how big)
+  // what reacts to the mouse: the shape, plus the icon left of the notch (and the count right of it) when closed
+  func hit(_ stage: Stage, photos: Bool) -> CGRect {
+    let r = rect(stage, photos: photos)
+    guard stage == .closed else { return r }
+    return CGRect(x: r.minX - ICON_W, y: 0, width: r.width + ICON_W + (photos ? 56 : 0), height: r.height)
+  }
+  // where the icon sits: left of the notch, then in the note, then in the panel's header (and how big)
   func icon(_ stage: Stage, in r: CGRect) -> (CGPoint, CGFloat) {
+    let e = ear(stage)
     switch stage {
-    case .closed: return (CGPoint(x: ICON_W / 2 + 2, y: notch.height / 2), 18)
-    case .note: return (CGPoint(x: 30, y: notch.height + 20), 24)
-    case .open: return (CGPoint(x: 34, y: 48), 28)
+    case .closed: return (CGPoint(x: -ICON_W / 2 + 4, y: notch.height / 2), 18)
+    case .note: return (CGPoint(x: e + 30, y: notch.height + 20), 24)
+    case .open: return (CGPoint(x: e + 34, y: 48), 28)
     }
   }
 }
@@ -239,29 +270,32 @@ struct NotchView: View {
   var body: some View {
     let r = g.rect(stage, photos: !m.photos.isEmpty)
     let (iconAt, iconSize) = g.icon(stage, in: r)
-    let radius: CGFloat = stage == .open ? 22 : stage == .note ? 16 : 10
-    let shape = UnevenRoundedRectangle(bottomLeadingRadius: radius, bottomTrailingRadius: radius)
+    let e = g.ear(stage)
+    let shape = NotchShape(ear: e, bottom: g.radius(stage))
     ZStack(alignment: .topLeading) {
       // background: black like the notch when closed, frosted glass when open
       ZStack {
         VisualEffect()
-        Color.black.opacity(stage == .closed ? 1 : 0.42)
+        Color.black.opacity(stage == .closed ? 1 : stage == .note ? 0.5 : 0.66)
       }
       .clipShape(shape)
-      .overlay(shape.strokeBorder(Color.white.opacity(stage == .closed ? 0 : 0.14), lineWidth: 1))
+      // closed: nothing but the icon is visible (no black block, whatever the screen)
+      .opacity(stage == .closed ? 0 : 1)
+      .overlay(shape.stroke(Color.white.opacity(stage == .closed ? 0 : 0.12), lineWidth: 1))
       .shadow(color: .black.opacity(stage == .closed ? 0 : 0.5), radius: 16, x: 0, y: 10)
 
       // the note
       Text(m.token.isEmpty ? "Connect AF1 Notch with Ktulu" : "Drop photos · \(m.race?.label ?? "Asset Uploader")")
         .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white).lineLimit(1)
         .frame(width: NOTE_W - 70, alignment: .leading)
-        .position(x: 50 + (NOTE_W - 70) / 2, y: g.notch.height + 20)
+        .position(x: e + 50 + (NOTE_W - 70) / 2, y: g.notch.height + 20)
         .opacity(stage == .note ? 1 : 0)
         .animation(stage == .note ? MOTION.delay(0.08) : .easeOut(duration: 0.1), value: stage)
 
       // the panel's content
       Expanded(m: m)
         .frame(width: PANEL.width, height: PANEL.height, alignment: .top)
+        .offset(x: e)
         .opacity(stage == .open ? 1 : 0)
         .animation(stage == .open ? .easeOut(duration: 0.22).delay(0.14) : .easeOut(duration: 0.08), value: stage)
         .allowsHitTesting(stage == .open)
@@ -270,7 +304,7 @@ struct NotchView: View {
       if stage == .closed && !m.photos.isEmpty {
         Text("\(m.photos.count)").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
           .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(LAVA_STRONG))
-          .position(x: r.width - 30, y: g.notch.height / 2)
+          .position(x: r.width + 26, y: g.notch.height / 2)
           .transition(.opacity)
       }
 
@@ -288,8 +322,8 @@ struct NotchView: View {
       .position(iconAt)
     }
     .frame(width: r.width, height: r.height, alignment: .topLeading)
-    .clipShape(Rectangle().offset(x: -40, y: -40).size(width: r.width + 80, height: r.height + 80))
-    .contentShape(shape)
+    .clipShape(Rectangle().offset(x: -60, y: -40).size(width: r.width + 120, height: r.height + 80))
+    .contentShape(Rectangle().offset(x: stage == .closed ? -ICON_W : 0).size(width: r.width + (stage == .closed ? ICON_W + 56 : 0), height: r.height))
     .onHover { h in
       pending?.cancel()
       let work = DispatchWorkItem {
@@ -488,7 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // the shape's rect on screen, a little padded so hover feels forgiving
   func track() {
     let stage: Stage = model.expanded ? .open : model.peek ? .note : .closed
-    let r = Geometry(notch: notch).rect(stage, photos: !model.photos.isEmpty)
+    let r = Geometry(notch: notch).hit(stage, photos: !model.photos.isEmpty)
     let top = panel.frame.maxY, left = panel.frame.minX
     let onScreen = NSRect(x: left + r.minX, y: top - r.maxY, width: r.width, height: r.height).insetBy(dx: -6, dy: -6)
     let inside = onScreen.contains(NSEvent.mouseLocation) || model.sending != nil
