@@ -260,7 +260,9 @@ export async function fromProduction(id: string, by: string, jobId?: string) {
     steps.push({ step: `page /${page.url} from production: copying to staging (whole page, draft first, then published on staging)`, ok: true });
   }
   // 3 the page copy, as far as the time allows
-  job = await stepJob(job.id, Math.max(10_000, 50_000 - (Date.now() - t0)));
+  // (stays well inside the 60 s function limit; what is left continues in the next call)
+  const budget = 38_000 - (Date.now() - t0);
+  if (budget > 8_000) job = await stepJob(job.id, budget);
   for (const line of job.log.slice(-12)) steps.push({ step: line, ok: !/^error/i.test(line) });
   if (job.finished) await linkCopied(card.id, stagingBadge!, job.pages[0]?.stg, by, p.title);
   return { ok: true, steps, badgeId: stagingBadge, prod: p, job: { id: job.id, finished: job.finished } };
