@@ -256,8 +256,8 @@ export async function fromProduction(id: string, by: string, jobId?: string) {
       return { ok: true, steps, badgeId: r.badgeId, prod: p, job: null };
     }
     const kw = (card.brief?.race || card.brief?.campaign || "").toLowerCase();
-    job = await startJob(`${card.id} page`, [page.id], `Team Cards`, { badges: { [p.id]: r.badgeId }, engagements: r.engagementId && r.prodEngagementId ? { [r.prodEngagementId]: r.engagementId } : {}, ...(kw ? { keyword: kw } : {}) });
-    steps.push({ step: `page /${page.url} from production: copying to staging (whole page, draft first, then published on staging)`, ok: true });
+    job = await startJob(`${card.id} page`, [page.id], `Team Cards`, { badges: { [p.id]: r.badgeId }, engagements: r.engagementId && r.prodEngagementId ? { [r.prodEngagementId]: r.engagementId } : {}, ...(kw ? { keyword: kw } : {}), ...(card.staging.pageId ? { stagingPage: card.staging.pageId } : {}) });
+    steps.push({ step: `page /${page.url} from production: copying to staging${card.staging.pageId ? " onto the card's staging page" : ""} (whole page, published on staging)`, ok: true });
   }
   // 3 the page copy, as far as the time allows
   // (stays well inside the 60 s function limit; what is left continues in the next call)
