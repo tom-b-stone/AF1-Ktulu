@@ -55,7 +55,7 @@ const TILES: { title: string; href: string; key: string; external?: boolean; tex
     title: "Race Coverage",
     href: "/coverage",
     key: "/coverage",
-    text: "Race weekend coverage. Placeholder, not built yet.",
+    text: "From session results to news articles, then the updates on the race page and the home page. Planned.",
   },
   {
     title: "UTM Studio",
