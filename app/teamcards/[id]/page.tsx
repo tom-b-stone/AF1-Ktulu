@@ -12,6 +12,7 @@ import { FIELDS, fieldByKey, fieldIssues, type FieldDef, type Loc } from "@/lib/
 import { SitePhone } from "../SitePhone";
 import { cardTemplate } from "@/lib/cardTemplate";
 import SetupStep from "../SetupStep";
+import { fromProd } from "../fromProd";
 import PrefillPicker from "../PrefillPicker";
 import { HINTS, LANES, STEPS, kindOf, stationsFor, type Lane, type Station } from "../journey";
 
@@ -142,7 +143,7 @@ export default function EditCard() {
   useEffect(() => {
     fetch(`/api/teamcards/${id}/from-prod`).then((r) => r.json()).then((j) => setProd(j.prod ?? null)).catch(() => {});
   }, [id]);
-  const stepsText = (j: { ok?: boolean; steps?: { step: string; ok: boolean; detail?: string }[] }) => (j.steps ?? []).filter((x) => !x.ok || /created|updated|placed|stopped/.test(x.step)).map((x) => (x.ok ? "✓ " : "✗ ") + x.step + (x.detail ? `: ${x.detail}` : "")).join("\n");
+  const stepsText = (j: { ok?: boolean; steps?: { step: string; ok: boolean; detail?: string }[] }) => (j.steps ?? []).filter((x) => !x.ok || /created|updated|placed|stopped|published|copied|page/i.test(x.step)).map((x) => (x.ok ? "✓ " : "✗ ") + x.step + (x.detail ? `: ${x.detail}` : "")).join("\n");
   useEffect(() => {
     if (!jumpHint) return;
     const t = setTimeout(() => setJumpHint(null), 6000);
@@ -727,7 +728,7 @@ export default function EditCard() {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: 12, color: C.mute, marginRight: 4 }}>Staging:</span>
                   {prod && (
-                    <button style={btn()} onClick={() => setAsk2({ title: "Get this card from production?", body: `“${prod.title}” is live on production. Its texts, images, engagement and module are copied to staging. Whatever is on staging for this card now is overwritten.`, ok: "Yes, copy from production", run: async () => { const j = await fetch(`/api/teamcards/${card.id}/from-prod`, { method: "POST" }).then((r) => r.json()); return (j.ok ? "Copied from production. Reload to see the staging content.\n" : "Not finished.\n") + stepsText(j); } })}>
+                    <button style={btn()} onClick={() => setAsk2({ title: "Get this card from production?", body: `“${prod.title}” is live on production. Its texts, images and engagement, and the whole page it sits on (with the other cards on that page), are copied to staging. Whatever is on staging for them now is overwritten. Takes up to a few minutes.`, ok: "Yes, copy from production", run: async () => { const j = await fromProd(card.id); return (j.ok ? "Copied from production: card, engagement and page. Reload to see the staging content.\n" : "Not finished.\n") + stepsText(j); } })}>
                       Get from production
                     </button>
                   )}

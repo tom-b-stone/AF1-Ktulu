@@ -176,7 +176,8 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
 // ---- from production ----------------------------------------------------------
 // A card that already lives on production: copy it to staging (overwrites the
 // staging copy) and point the Ktulu card at it.
-import { copyTeamCard, listProdCards } from "./teamCardCopy";
+import { copyTeamCard, listProdCards, prod } from "./teamCardCopy";
+import { readJob, startJob, stepJob, type Job } from "./siteCopy";
 import { reloadCard } from "./teamCards";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -193,23 +194,76 @@ export async function prodMatch(card: CardRecord): Promise<{ id: string; title: 
   return hit ? { id: hit.id, title: String(hit.title) } : null;
 }
 
-export async function fromProduction(id: string, by: string) {
+// The production page that holds the card's module (badge-engagement-teaser):
+// the card's CTA pages and mechanic page first, then a search over all pages.
+async function prodPageOfCard(prodBadge: string): Promise<{ id: string; url: string } | null> {
+  const b = await prod(`/badges/${prodBadge}?depth=1&locale=en`).catch(() => null);
+  const cand: string[] = [];
+  for (const c of [...(b?.unearnedBadgeCTA ?? []), ...(b?.rewardCTA ?? [])] as Json[]) if (c?.doc?.value?.id) cand.push(c.doc.value.id);
+  for (const m of (b?.mechanics ?? []) as Json[]) if (m?.targetOriginPage?.id) cand.push(m.targetOriginPage.id);
+  const found = await prod(`/pages?where[sections.badge][equals]=${prodBadge}&limit=5&depth=0&locale=en`).catch(() => ({ docs: [] }));
+  for (const d of found.docs ?? []) cand.push(d.id);
+  for (const pid of [...new Set(cand)]) {
+    const pg = await prod(`/pages/${pid}?depth=0&locale=en`).catch(() => null);
+    if ((pg?.sections ?? []).some((x: Json) => x.blockType === "badge-engagement-teaser" && idOf(x.badge) === prodBadge)) return { id: pg.id, url: pg.url ?? "" };
+  }
+  return null;
+}
+
+// After the page copy: point the Ktulu card at its page, module and engagement on staging.
+async function linkCopied(cardId: string, stagingBadge: string, stagingPage: string | undefined, by: string, title: string) {
+  const fresh = await listCards();
+  const c = fresh.find((x) => x.id === cardId)!;
+  let blockId: string | undefined, engagementId: string | undefined;
+  if (stagingPage) {
+    const pg = await stg(`/pages/${stagingPage}?locale=en&depth=0&draft=true`).catch(() => null);
+    const blk = (pg?.sections ?? []).find((x: Json) => x.blockType === "badge-engagement-teaser" && idOf(x.badge) === stagingBadge);
+    blockId = blk?.id;
+    engagementId = idOf((blk?.children ?? []).find((k: Json) => k.blockType === "engagement")?.engagement) || undefined;
+  }
+  c.staging = { ...c.staging, badgeId: stagingBadge, ...(engagementId && !c.staging.engagementId ? { engagementId } : {}), ...(stagingPage && blockId ? { pageId: stagingPage, blockId } : {}) };
+  c.status = "Staging";
+  c.log = [{ at: new Date().toISOString(), by, summary: `Copied from production (${title}): card, engagement and page, staging overwritten` }, ...c.log].slice(0, 50);
+  await saveCardsPublic(fresh);
+  await reloadCard(cardId).catch(() => undefined);
+}
+
+// Card, engagement and the whole page it sits on, from production to staging.
+// The page goes through the site copy (resumable, ~40 s per step): the first
+// call copies the card and starts the page, later calls with the job id go on.
+export async function fromProduction(id: string, by: string, jobId?: string) {
   const cards = await listCards();
   const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
   if (!card) return { ok: false, steps: [{ step: "card not found", ok: false }] as CopyStep[] };
   const p = await prodMatch(card);
   if (!p) return { ok: false, steps: [{ step: "not found on production", ok: false, detail: "No production card with this name or link." }] as CopyStep[] };
-  const r = await copyTeamCard({ badgeId: p.id, targetPageId: card.staging.pageId });
-  if (r.badgeId) {
-    const fresh = await listCards();
-    const c = fresh.find((x) => x.id === card.id)!;
-    c.staging = { ...c.staging, badgeId: r.badgeId, ...(r.engagementId ? { engagementId: r.engagementId } : {}), ...(r.pageId ? { pageId: r.pageId } : {}) };
-    c.status = "Staging";
-    c.log = [{ at: new Date().toISOString(), by, summary: `Copied from production (${p.title}), staging overwritten` }, ...c.log].slice(0, 50);
-    await saveCardsPublic(fresh);
-    await reloadCard(card.id).catch(() => undefined);
+  const t0 = Date.now();
+
+  let job: Job | null = jobId ? await readJob(jobId) : null;
+  let steps: CopyStep[] = [];
+  let stagingBadge = job?.badges[p.id];
+  if (!job) {
+    // 1 the card and its mechanic engagement
+    const r = await copyTeamCard({ badgeId: p.id, targetPageId: card.staging.pageId, withPageBlock: false });
+    steps = r.steps;
+    if (!r.badgeId) return { ok: false, steps, prod: p };
+    stagingBadge = r.badgeId;
+    // 2 the whole production page with the card's module (other cards and engagements on it come along)
+    const page = await prodPageOfCard(p.id);
+    if (!page) {
+      steps.push({ step: "page skipped: no production page shows this card's module", ok: true });
+      await linkCopied(card.id, r.badgeId, undefined, by, p.title);
+      return { ok: true, steps, badgeId: r.badgeId, prod: p, job: null };
+    }
+    const kw = (card.brief?.race || card.brief?.campaign || "").toLowerCase();
+    job = await startJob(`${card.id} page`, [page.id], `Team Cards`, { badges: { [p.id]: r.badgeId }, engagements: r.engagementId && r.prodEngagementId ? { [r.prodEngagementId]: r.engagementId } : {}, ...(kw ? { keyword: kw } : {}) });
+    steps.push({ step: `page /${page.url} from production: copying to staging (whole page, draft first, then published on staging)`, ok: true });
   }
-  return { ok: r.ok, steps: r.steps, badgeId: r.badgeId, prod: p };
+  // 3 the page copy, as far as the time allows
+  job = await stepJob(job.id, Math.max(10_000, 50_000 - (Date.now() - t0)));
+  for (const line of job.log.slice(-12)) steps.push({ step: line, ok: !/^error/i.test(line) });
+  if (job.finished) await linkCopied(card.id, stagingBadge!, job.pages[0]?.stg, by, p.title);
+  return { ok: true, steps, badgeId: stagingBadge, prod: p, job: { id: job.id, finished: job.finished } };
 }
 
 // ---- engagement and module ------------------------------------------------------

@@ -47,7 +47,7 @@ async function saveJob(j: Job) {
   await kvSet(key(j.id), JSON.stringify(j));
 }
 
-export async function startJob(name: string, prodIds: string[], folder: string): Promise<Job> {
+export async function startJob(name: string, prodIds: string[], folder: string, seed: { badges?: Record<string, string>; engagements?: Record<string, string>; keyword?: string } = {}): Promise<Job> {
   const pages: JobPage[] = [];
   for (const id of prodIds) {
     const p = await prod(`/pages/${id}?depth=0&locale=en&draft=false`);
@@ -56,7 +56,7 @@ export async function startJob(name: string, prodIds: string[], folder: string):
   }
   // parents before children
   pages.sort((a, b) => a.url.split("/").length - b.url.split("/").length);
-  const job: Job = { id: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`, name, folder, pages, media: {}, badges: {}, engagements: {}, tags: {}, log: [], finished: false, updatedAt: "" };
+  const job: Job = { id: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`, name, folder, pages, media: {}, badges: { ...(seed.badges ?? {}) }, engagements: { ...(seed.engagements ?? {}) }, tags: {}, log: [], finished: false, updatedAt: "", ...(seed.keyword ? { keyword: seed.keyword } : {}) };
   await saveJob(job);
   return job;
 }

@@ -16,10 +16,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json({ prod: await prodMatch(card).catch(() => null) });
 }
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+// POST {} → card + engagement, starts the page copy · POST { job } → goes on with the page copy
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const r = await fromProduction(params.id, session.user.email);
+  const b = (await req.json().catch(() => ({}))) as { job?: string };
+  const r = await fromProduction(params.id, session.user.email, b.job || undefined);
   console.log(`[teamcards] ${session.user.email} from production ${params.id}: ${r.ok ? "ok" : "failed"}`);
   return NextResponse.json(r, { status: r.ok ? 200 : 502 });
 }

@@ -27,7 +27,7 @@ type Loc = (typeof LOCALES)[number];
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export type CopyStep = { step: string; ok: boolean; detail?: string; link?: string };
-export type CopyResult = { ok: boolean; steps: CopyStep[]; badgeId?: string; engagementId?: string; pageId?: string };
+export type CopyResult = { ok: boolean; steps: CopyStep[]; badgeId?: string; engagementId?: string; prodEngagementId?: string; pageId?: string };
 
 export async function prod(path: string): Promise<Json> {
   const res = await fetch(`${PROD_API}${path}`, { cache: "no-store" });
@@ -237,6 +237,7 @@ export async function copyTeamCard(opts: CopyOptions): Promise<CopyResult> {
       const engTitle = typeof engagementAll.title === "string" ? engagementAll.title : engagementAll.title?.en;
       engagementId = await upsertLocalised("engagements", mapped, `where[title][equals]=${encodeURIComponent(engTitle)}&locale=en`, steps, `engagement "${engTitle}"`);
       res.engagementId = engagementId;
+      res.prodEngagementId = prodEngId;
     }
 
     // 2 page targets of the CTAs (internal links) → staging page ids

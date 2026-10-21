@@ -11,6 +11,7 @@ import Replace from "./Replace";
 import { cardTemplate } from "@/lib/cardTemplate";
 import TrackerImport from "./TrackerImport";
 import BuildPages from "./BuildPages";
+import { fromProd } from "./fromProd";
 import { SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
 
@@ -404,7 +405,7 @@ function BulkBar({ ids, cards, onClear, onDone }: { ids: string[]; cards: Row[];
         let ok = 0;
         const errs: string[] = [];
         for (const id of list) {
-          const j = await fetch(`/api/teamcards/${id}/${path}`, { method: "POST" }).then((r) => r.json()).catch(() => ({ ok: false }));
+          const j = path === "from-prod" ? await fromProd(id) : await fetch(`/api/teamcards/${id}/${path}`, { method: "POST" }).then((r) => r.json()).catch(() => ({ ok: false }));
           if (j.ok) ok++;
           else errs.push(`${id}: ${(j.steps ?? []).filter((x: { ok: boolean }) => !x.ok).map((x: { step: string; detail?: string }) => x.detail || x.step).join(", ") || "failed"}`);
         }
