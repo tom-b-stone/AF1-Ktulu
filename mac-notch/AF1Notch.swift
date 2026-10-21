@@ -228,14 +228,13 @@ struct NotchShape: Shape {
   func path(in r: CGRect) -> Path {
     var p = Path()
     let w = r.width, h = r.height, e = ear, b = min(bottom, h / 2)
+    // circular corners like the hardware notch (tangent arcs, not quad curves)
     p.move(to: CGPoint(x: 0, y: 0))
-    p.addQuadCurve(to: CGPoint(x: e, y: e), control: CGPoint(x: e, y: 0))
-    p.addLine(to: CGPoint(x: e, y: h - b))
-    p.addQuadCurve(to: CGPoint(x: e + b, y: h), control: CGPoint(x: e, y: h))
-    p.addLine(to: CGPoint(x: w - e - b, y: h))
-    p.addQuadCurve(to: CGPoint(x: w - e, y: h - b), control: CGPoint(x: w - e, y: h))
-    p.addLine(to: CGPoint(x: w - e, y: e))
-    p.addQuadCurve(to: CGPoint(x: w, y: 0), control: CGPoint(x: w - e, y: 0))
+    p.addArc(tangent1End: CGPoint(x: e, y: 0), tangent2End: CGPoint(x: e, y: e), radius: e)
+    p.addArc(tangent1End: CGPoint(x: e, y: h), tangent2End: CGPoint(x: e + b, y: h), radius: b)
+    p.addArc(tangent1End: CGPoint(x: w - e, y: h), tangent2End: CGPoint(x: w - e, y: h - b), radius: b)
+    p.addArc(tangent1End: CGPoint(x: w - e, y: 0), tangent2End: CGPoint(x: w, y: 0), radius: e)
+    p.addLine(to: CGPoint(x: w, y: 0))
     p.closeSubpath()
     return p
   }
@@ -244,14 +243,15 @@ struct NotchShape: Shape {
 struct Geometry {
   let notch: CGSize
   func ear(_ s: Stage) -> CGFloat { s == .closed ? 6 : 12 }
-  func radius(_ s: Stage) -> CGFloat { s == .open ? 26 : s == .note ? 18 : 9 }
+  func radius(_ s: Stage) -> CGFloat { s == .open ? 26 : s == .note ? 18 : 11 }
   // the shape's frame in the window (origin top left), ears included. Closed it sits exactly behind the notch.
   func rect(_ stage: Stage, photos: Bool) -> CGRect {
     let mid = CANVAS.width / 2, e = ear(stage)
     switch stage {
     case .closed:
       // the notch, extended to the left for the icon (and to the right for the photo count)
-      let left = notch.width / 2 + ICON_W + e, right = notch.width / 2 + (photos ? 56 : 0) + e
+      // without photos the right end stays hidden under the notch, so only the left half shows
+      let left = notch.width / 2 + ICON_W + e, right = photos ? notch.width / 2 + 56 + e : notch.width / 2 - 4
       return CGRect(x: mid - left, y: 0, width: left + right, height: notch.height)
     case .note: return CGRect(x: mid - NOTE_W / 2 - e, y: 0, width: NOTE_W + 2 * e, height: notch.height + 40)
     case .open: return CGRect(x: mid - PANEL.width / 2 - e, y: 0, width: PANEL.width + 2 * e, height: PANEL.height)
@@ -267,7 +267,7 @@ struct Geometry {
     switch stage {
     case .closed: return (CGPoint(x: e + ICON_W / 2 + 2, y: notch.height / 2), 18)
     case .note: return (CGPoint(x: e + 30, y: notch.height + 20), 24)
-    case .open: return (CGPoint(x: e + 34, y: 48), 28)
+    case .open: return (CGPoint(x: e + 34, y: 19), 24)
     }
   }
 }
@@ -286,12 +286,14 @@ struct NotchView: View {
     let e = g.ear(stage)
     let shape = NotchShape(ear: e, bottom: g.radius(stage))
     ZStack(alignment: .topLeading) {
-      // background: solid black like the notch when closed (it extends the notch), frosted glass when open
-      ZStack {
-        VisualEffect(visible: stage != .closed)
-        Color.black.opacity(stage == .closed ? 1 : stage == .note ? 0.5 : 0.66)
-      }
-      .clipShape(shape)
+      // background: solid black like the notch when closed (it extends the notch), dark glass when open.
+      // Pure SwiftUI shapes only: the AppKit blur view ignored the clipping and left a square box.
+      // solid black down to the notch's height (the notch disappears in it), then easing to 80 % black
+      shape.fill(LinearGradient(stops: [
+        .init(color: .black, location: 0),
+        .init(color: .black, location: min(1, g.notch.height / r.height)),
+        .init(color: .black.opacity(stage == .closed ? 1 : 0.8), location: 1),
+      ], startPoint: .top, endPoint: .bottom))
       .overlay(shape.stroke(Color.white.opacity(stage == .closed ? 0 : 0.12), lineWidth: 1))
       .shadow(color: .black.opacity(stage == .closed ? 0 : 0.5), radius: 16, x: 0, y: 10)
 
@@ -304,12 +306,13 @@ struct NotchView: View {
         .animation(stage == .note ? MOTION.delay(0.08) : .easeOut(duration: 0.1), value: stage)
 
       // the panel's content
-      Expanded(m: m)
-        .frame(width: PANEL.width, height: PANEL.height, alignment: .top)
-        .offset(x: e)
-        .opacity(stage == .open ? 1 : 0)
-        .animation(stage == .open ? .easeOut(duration: 0.22).delay(0.14) : .easeOut(duration: 0.08), value: stage)
-        .allowsHitTesting(stage == .open)
+      // only there while open: its AppKit pickers ignored opacity 0 and painted a black box when closed
+      if stage == .open {
+        Expanded(m: m)
+          .frame(width: PANEL.width, height: PANEL.height, alignment: .top)
+          .offset(x: e)
+          .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.14)), removal: .opacity.animation(.easeOut(duration: 0.08))))
+      }
 
       // photo count while closed
       if stage == .closed && !m.photos.isEmpty {
@@ -369,13 +372,14 @@ struct Expanded: View {
       HStack(spacing: 10) {
         Color.clear.frame(width: 26, height: 1) // the icon lands here
         Text("AF1 Asset Tool").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
-        // Ktulu's mark, as in the web app
+        Spacer() // the notch sits here
+        // Ktulu's mark, as in the web app, right of the notch
         Text("^(;,;)^").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundColor(Color(red: 1, green: 0.27, blue: 0.1))
           .help("Hands over to Ktulu")
-        Spacer()
         Button { withAnimation(MOTION) { m.expand(false) } } label: { Image(systemName: "chevron.up").foregroundColor(MUTED) }.buttonStyle(.plain).help("Close")
       }
-      .padding(.top, 38)
+      .frame(height: 22)
+      .padding(.top, 8) // the header row lines up with the notch
 
       if m.token.isEmpty || (m.setup == nil && m.error != nil) {
         Connect(m: m)
