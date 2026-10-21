@@ -401,7 +401,7 @@ export function stagingLinks(c: CardRecord) {
   return {
     badge: c.staging.badgeId ? `${base}/badges/${c.staging.badgeId}` : undefined,
     engagement: c.staging.engagementId ? `${base}/engagements/${c.staging.engagementId}` : undefined,
-    page: c.staging.pageId ? `${base}/pages/${c.staging.pageId}` : undefined,
+    page: (c.staging.pageId || c.setup?.module?.pageId) ? `${base}/pages/${c.staging.pageId || c.setup?.module?.pageId}` : undefined,
   };
 }
 

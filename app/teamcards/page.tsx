@@ -238,21 +238,24 @@ export default function Page() {
     },
     {
       key: "edit",
-      header: "",
-      width: "128px",
+      header: "Staging CMS",
+      width: "250px",
       cell: (c) => (
-        <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+        <span style={{ display: "inline-flex", gap: 12, alignItems: "center" }}>
           <Link className="btn btn-primary" href={`/teamcards/${c.id}`} style={{ height: 30, padding: "0 12px" }}>
             Edit
           </Link>
-          {c.links.badge ? (
-            <a href={c.links.badge} target="_blank" rel="noreferrer" title="Open the card in the staging CMS" style={{ fontSize: 12, color: "var(--muted)" }}>
-              CMS ↗
-            </a>
-          ) : (
-            <span title="Not on staging yet" style={{ fontSize: 12, color: "var(--muted)", opacity: 0.6 }}>
-              —
-            </span>
+          {/* card, engagement and page in the staging CMS; what does not exist yet stays grey */}
+          {([["Card", c.links.badge, "the card (badge)"], ["Engagement", c.links.engagement, "the engagement"], ["Page", c.links.page, "the page with the module"]] as const).map(([label, href, what]) =>
+            href ? (
+              <a key={label} href={href} target="_blank" rel="noreferrer" title={`Open ${what} in the staging CMS`} style={{ fontSize: 12, color: "var(--fg)" }}>
+                {label} ↗
+              </a>
+            ) : (
+              <span key={label} title={`No ${what} on staging yet`} style={{ fontSize: 12, color: "var(--muted)", opacity: 0.5 }}>
+                {label}
+              </span>
+            ),
           )}
         </span>
       ),
