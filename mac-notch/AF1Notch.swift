@@ -182,6 +182,31 @@ final class Model: ObservableObject {
 }
 
 // ---- views ---------------------------------------------------------------------
+let ICON_W: CGFloat = 34
+
+// frosted glass behind the window (the desktop shows through, blurred), a dark tint for contrast,
+// a thin light edge and a soft drop shadow
+struct VisualEffect: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSVisualEffectView {
+    let v = NSVisualEffectView()
+    v.material = .hudWindow
+    v.blendingMode = .behindWindow
+    v.state = .active
+    return v
+  }
+  func updateNSView(_ v: NSVisualEffectView, context: Context) {}
+}
+struct Glass: ViewModifier {
+  let radius: CGFloat
+  func body(content: Content) -> some View {
+    let shape = UnevenRoundedRectangle(bottomLeadingRadius: radius, bottomTrailingRadius: radius)
+    return content
+      .background(ZStack { VisualEffect(); Color.black.opacity(0.42) }.clipShape(shape))
+      .overlay(shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+      .compositingGroup()
+      .shadow(color: .black.opacity(0.5), radius: 16, x: 0, y: 10)
+  }
+}
 struct NotchView: View {
   @ObservedObject var m: Model
   @State private var target = false
@@ -193,7 +218,7 @@ struct NotchView: View {
       if m.expanded {
         Expanded(m: m)
           .frame(width: 560, height: 360)
-          .background(UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22).fill(Color.black))
+          .modifier(Glass(radius: 22))
           .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
       } else if m.peek {
         Button { m.pickFiles() } label: {
@@ -204,21 +229,32 @@ struct NotchView: View {
           }
           .padding(.top, notch.height + 6).padding(.bottom, 9).padding(.horizontal, 16)
           .frame(minWidth: notch.width + 40)
-          .background(UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16).fill(Color.black))
+          .modifier(Glass(radius: 16))
         }
         .buttonStyle(.plain)
         .help("Click to choose photos, or drag them here")
         .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
       } else {
-        UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10)
-          .fill(Color.black)
-          .frame(width: notch.width + (m.photos.isEmpty ? 0 : 56), height: notch.height)
-          .overlay(alignment: .trailing) {
-            if !m.photos.isEmpty {
-              Text("\(m.photos.count)").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(LAVA_STRONG)).padding(.trailing, 10)
+        // the notch plus a small permanent icon on its left: the hotspot to hover, click or drop on
+        HStack(spacing: 0) {
+          Button { m.pickFiles() } label: {
+            ZStack {
+              Circle().fill(LAVA_STRONG).frame(width: 18, height: 18)
+              Image(systemName: m.token.isEmpty ? "link" : "photo.on.rectangle.angled").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
             }
+            .frame(width: ICON_W, height: notch.height)
+            .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
+          .help("AF1 Notch: drop photos here or click to choose")
+          Spacer(minLength: 0)
+          if !m.photos.isEmpty {
+            Text("\(m.photos.count)").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+              .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(LAVA_STRONG)).padding(.trailing, 10)
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: notch.height)
+        .background(UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10).fill(Color.black))
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -410,9 +446,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let f = screen.frame
     let wh: CGSize
     switch size {
-    case .collapsed: wh = CGSize(width: notch.width + (model.photos.isEmpty ? 8 : 64), height: notch.height)
-    case .peek: wh = CGSize(width: max(notch.width + 60, 380), height: notch.height + 40)
-    case .full: wh = CGSize(width: 580, height: 372)
+    case .collapsed:
+      // the notch, the icon on its left, the photo count on its right
+      let left = notch.width / 2 + ICON_W, right = notch.width / 2 + (model.photos.isEmpty ? 2 : 58)
+      return NSRect(x: f.midX - left, y: f.maxY - notch.height, width: left + right, height: notch.height)
+    case .peek: wh = CGSize(width: max(notch.width + 60, 380) + 48, height: notch.height + 40 + 34)
+    case .full: wh = CGSize(width: 560 + 48, height: 360 + 36)
     }
     return NSRect(x: f.midX - wh.width / 2, y: f.maxY - wh.height, width: wh.width, height: wh.height)
   }
