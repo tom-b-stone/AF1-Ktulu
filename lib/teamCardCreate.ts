@@ -211,21 +211,26 @@ async function prodPageOfCard(prodBadge: string): Promise<{ id: string; url: str
 }
 
 // After the page copy: point the Ktulu card at its page, module and engagement on staging.
-async function linkCopied(cardId: string, stagingBadge: string, stagingPage: string | undefined, by: string, title: string) {
+async function linkCopied(cardId: string, stagingBadge: string, stagingPage: string | undefined, by: string, title: string): Promise<CopyStep> {
   const fresh = await listCards();
   const c = fresh.find((x) => x.id === cardId)!;
-  let blockId: string | undefined, engagementId: string | undefined;
+  let blockId: string | undefined, engagementId: string | undefined, note = "";
   if (stagingPage) {
     const pg = await stg(`/pages/${stagingPage}?locale=en&depth=0&draft=true`).catch(() => null);
     const blk = (pg?.sections ?? []).find((x: Json) => x.blockType === "badge-engagement-teaser" && idOf(x.badge) === stagingBadge);
     blockId = blk?.id;
     engagementId = idOf((blk?.children ?? []).find((k: Json) => k.blockType === "engagement")?.engagement) || undefined;
+    if (!blk) {
+      const teasers = (pg?.sections ?? []).filter((x: Json) => x.blockType === "badge-engagement-teaser").map((x: Json) => idOf(x.badge));
+      note = `module of this card not found on the copied page (teasers there: ${teasers.join(", ") || "none"})`;
+    }
   }
   c.staging = { ...c.staging, badgeId: stagingBadge, ...(engagementId && !c.staging.engagementId ? { engagementId } : {}), ...(stagingPage && blockId ? { pageId: stagingPage, blockId } : {}) };
   c.status = "Staging";
   c.log = [{ at: new Date().toISOString(), by, summary: `Copied from production (${title}): card, engagement and page, staging overwritten` }, ...c.log].slice(0, 50);
   await saveCardsPublic(fresh);
   await reloadCard(cardId).catch(() => undefined);
+  return note ? { step: note, ok: false } : { step: `card points at its page, module${engagementId ? " and engagement" : ""} on staging`, ok: true };
 }
 
 // Card, engagement and the whole page it sits on, from production to staging.
@@ -252,7 +257,7 @@ export async function fromProduction(id: string, by: string, jobId?: string) {
     const page = await prodPageOfCard(p.id);
     if (!page) {
       steps.push({ step: "page skipped: no production page shows this card's module", ok: true });
-      await linkCopied(card.id, r.badgeId, undefined, by, p.title);
+      steps.push(await linkCopied(card.id, r.badgeId, undefined, by, p.title));
       return { ok: true, steps, badgeId: r.badgeId, prod: p, job: null };
     }
     const kw = (card.brief?.race || card.brief?.campaign || "").toLowerCase();
@@ -264,7 +269,7 @@ export async function fromProduction(id: string, by: string, jobId?: string) {
   const budget = 38_000 - (Date.now() - t0);
   if (budget > 8_000) job = await stepJob(job.id, budget);
   for (const line of job.log.slice(-12)) steps.push({ step: line, ok: !/^error/i.test(line) });
-  if (job.finished) await linkCopied(card.id, stagingBadge!, job.pages[0]?.stg, by, p.title);
+  if (job.finished) steps.push(await linkCopied(card.id, stagingBadge!, job.pages[0]?.stg, by, p.title));
   return { ok: true, steps, badgeId: stagingBadge, prod: p, job: { id: job.id, finished: job.finished } };
 }
 
