@@ -57,6 +57,8 @@ final class Model: ObservableObject {
   @Published var session = ""
   @Published var photos: [Photo] = []
   @Published var expanded = false
+  // hovering shows only a small note under the notch; the big panel opens with files
+  @Published var peek = false
   @Published var sending: (done: Int, total: Int)?
   var onExpand: ((Bool) -> Void)?
 
@@ -68,9 +70,26 @@ final class Model: ObservableObject {
   }
 
   func expand(_ on: Bool) {
+    if on { peek = false }
     if expanded == on { return }
     expanded = on
     onExpand?(on)
+  }
+  func setPeek(_ on: Bool) {
+    if peek == on { return }
+    peek = on
+    onExpand?(expanded)
+  }
+
+  // the peek note, clicked: pick photos in a file dialog (or connect first)
+  func pickFiles() {
+    if token.isEmpty || setup == nil { expand(true); return }
+    let o = NSOpenPanel()
+    o.allowsMultipleSelection = true
+    o.canChooseDirectories = false
+    o.allowedContentTypes = [.image]
+    NSApp.activate(ignoringOtherApps: true)
+    if o.runModal() == .OK { add(o.urls) }
   }
 
   func connect(_ t: String) {
@@ -114,6 +133,7 @@ final class Model: ObservableObject {
     for u in urls where (UTType(filenameExtension: u.pathExtension)?.conforms(to: .image) ?? false) && !photos.contains(where: { $0.url == u }) {
       photos.append(Photo(url: u, thumb: thumbnail(u, 120).map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }))
     }
+    if !photos.isEmpty { withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { expand(true) } }
   }
 
   private func post(_ body: [String: Any]) async throws -> [String: Any] {
@@ -175,6 +195,20 @@ struct NotchView: View {
           .frame(width: 560, height: 360)
           .background(UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22).fill(Color.black))
           .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+      } else if m.peek {
+        Button { m.pickFiles() } label: {
+          HStack(spacing: 8) {
+            Image(systemName: m.token.isEmpty ? "link" : "arrow.down.to.line").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+            Text(m.token.isEmpty ? "Connect AF1 Notch with Ktulu" : "Drop photos · \(m.race?.label ?? "Asset Uploader")")
+              .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white).lineLimit(1)
+          }
+          .padding(.top, notch.height + 6).padding(.bottom, 9).padding(.horizontal, 16)
+          .frame(minWidth: notch.width + 40)
+          .background(UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16).fill(Color.black))
+        }
+        .buttonStyle(.plain)
+        .help("Click to choose photos, or drag them here")
+        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
       } else {
         UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10)
           .fill(Color.black)
@@ -193,11 +227,14 @@ struct NotchView: View {
     .onHover { h in
       pending?.cancel()
       let work = DispatchWorkItem {
-        if h { withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { m.expand(true) } }
-        else if m.photos.isEmpty && m.sending == nil { withAnimation(.easeIn(duration: 0.2)) { m.expand(false) } }
+        if h { if !m.expanded { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { m.setPeek(true) } } }
+        else {
+          withAnimation(.easeIn(duration: 0.18)) { m.setPeek(false) }
+          if m.photos.isEmpty && m.sending == nil { withAnimation(.easeIn(duration: 0.2)) { m.expand(false) } }
+        }
       }
       pending = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + (h ? 0.7 : 0.5), execute: work)
+      DispatchQueue.main.asyncAfter(deadline: .now() + (h ? 0.35 : 0.5), execute: work)
     }
     .onDrop(of: [.fileURL], isTargeted: Binding(get: { target }, set: { v in target = v; if v { withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { m.expand(true) } } })) { providers in
       for p in providers {
@@ -369,7 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // outside the notch the panel lets clicks through while collapsed, so the menu bar keeps working
   func updateClickThrough() {
     let near = collapsed.insetBy(dx: -20, dy: -12).contains(NSEvent.mouseLocation)
-    panel.ignoresMouseEvents = !(model.expanded || near)
+    panel.ignoresMouseEvents = !(model.expanded || model.peek || near)
   }
 
   @objc func openPanel() { withAnimation { model.expand(true) } }
