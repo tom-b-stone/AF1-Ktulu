@@ -165,6 +165,7 @@ final class Model: ObservableObject {
 struct NotchView: View {
   @ObservedObject var m: Model
   @State private var target = false
+  @State private var pending: DispatchWorkItem?
   let notch: CGSize
 
   var body: some View {
@@ -187,9 +188,16 @@ struct NotchView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    // opens only after resting on the notch for a moment (passing through the menu bar does nothing);
+    // dragging files onto it opens at once
     .onHover { h in
-      if h { withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { m.expand(true) } }
-      else if m.photos.isEmpty && m.sending == nil { withAnimation(.easeIn(duration: 0.18)) { m.expand(false) } }
+      pending?.cancel()
+      let work = DispatchWorkItem {
+        if h { withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { m.expand(true) } }
+        else if m.photos.isEmpty && m.sending == nil { withAnimation(.easeIn(duration: 0.2)) { m.expand(false) } }
+      }
+      pending = work
+      DispatchQueue.main.asyncAfter(deadline: .now() + (h ? 0.7 : 0.5), execute: work)
     }
     .onDrop(of: [.fileURL], isTargeted: Binding(get: { target }, set: { v in target = v; if v { withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { m.expand(true) } } })) { providers in
       for p in providers {
