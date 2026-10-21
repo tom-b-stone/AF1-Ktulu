@@ -223,8 +223,11 @@ export default function EditCard() {
   const textOf = useCallback(
     (k: string, l: Loc) => {
       // card details on the back: values from the record where known, otherwise the captured text stays
-      if (k === "meta:race") return card?.raceLabel ? `${card.raceLabel}${/GP$/.test(card.raceLabel) ? "" : " GP"}` : "";
-      if (k === "meta:type") return card?.badgeTypeLabel ?? "";
+      // never the template's sample (another race or type): the card's own, else "Not defined yet"
+      const br = (card as unknown as { brief?: Record<string, string> } | null)?.brief ?? {};
+      const race = card?.raceLabel || br.race || "";
+      if (k === "meta:race") return race ? `${race}${/GP$/.test(race) ? "" : " GP"}` : "Not defined yet";
+      if (k === "meta:type") return card?.badgeTypeLabel || br.badgeType || "Not defined yet";
       if (k === "meta:season") return "";
       return vals[k]?.[l] ?? "";
     },
