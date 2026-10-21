@@ -151,7 +151,8 @@ export async function loadFromStaging(rec: CardRecord): Promise<CardRecord> {
 export async function listCards(): Promise<CardRecord[]> {
   const raw = await kvGet(KEY).catch(() => null);
   // static facts from the seed (images, mechanic) win over stored ones
-  if (raw) return (JSON.parse(raw) as CardRecord[]).map((c) => ({ ...c, ...(SEED.find((s) => s.id === c.id) ?? {}), values: c.values, log: c.log, status: c.status }));
+  // the seed fills gaps; staging ids the tool saved later (e.g. a copy from production) win over the seed's
+  if (raw) return (JSON.parse(raw) as CardRecord[]).map((c) => { const seed = SEED.find((s) => s.id === c.id); return { ...c, ...(seed ?? {}), values: c.values, log: c.log, status: c.status, staging: { ...(seed?.staging ?? {}), ...c.staging } }; });
   const seeded: CardRecord[] = [];
   for (const s of SEED) {
     const base: CardRecord = { ...s, values: {}, updatedAt: new Date().toISOString(), log: [{ at: new Date().toISOString(), by: "setup", summary: "Imported from staging (rebuilt from production)" }] };
