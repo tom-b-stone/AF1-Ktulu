@@ -446,7 +446,7 @@ export default function NewBatchPage() {
                 </button>
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                Files will be named <code>audif1_{race.year}_{race.loc}_GP_&lt;descriptor&gt;_&lt;nn&gt;.webp</code> (plus a slot like <code>hero</code> only when the original name carries one); the number continues from what is already in the folder.
+                Files will be named <code>audif1_{race.year}_{race.loc}_GP_&lt;descriptor&gt;.webp</code> (plus a slot like <code>hero</code> only when the original name carries one). A number such as <code>_02</code> is added only when the same name already exists in the folder or comes up twice in this batch.
               </div>
             </div>
           )}

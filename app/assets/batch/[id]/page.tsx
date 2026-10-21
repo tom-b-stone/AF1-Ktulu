@@ -428,9 +428,8 @@ export default function BatchPage() {
     }
   }
 
-  // Upload every ready row with an alt text to the chosen CMS folder. The
-  // number continues from the highest one already in that folder, per
-  // context prefix. One request per image; results land on the rows.
+  // Upload every ready row with an alt text to the chosen CMS folder. A
+  // number only where a name repeats (in the folder or in this upload). One request per image; results land on the rows.
   async function uploadAll() {
     if (!batch || !batch.targetFolderId) return;
     setConfirmUpload(false);
