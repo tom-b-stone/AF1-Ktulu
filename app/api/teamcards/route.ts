@@ -42,8 +42,8 @@ export async function POST(req: NextRequest) {
     }
     // { action: "new", name, badgeType?, campaign?, race? } → a new card, set up step by step
     if (b?.action === "new") {
-      const n = b as unknown as { name?: string; badgeType?: string; campaign?: string; race?: string };
-      const card = await createCard({ name: n.name ?? "", badgeType: n.badgeType, campaign: n.campaign, race: n.race }, session.user.email);
+      const n = b as unknown as { name?: string; badgeType?: string; campaign?: string; race?: string; test?: boolean };
+      const card = await createCard({ name: n.name ?? "", badgeType: n.badgeType, campaign: n.campaign, race: n.race, test: !!n.test }, session.user.email);
       console.log(`[teamcards] ${session.user.email} created ${card.id}`);
       return NextResponse.json({ card });
     }

@@ -522,7 +522,7 @@ ${SEO_WRITE_RECIPE}`);
     async run(args, actor) {
       const changes = await readChangeset(String(args.changeset ?? ""));
       if (!changes) return text("Changeset not found or expired. Run teamcard_propose again.", true);
-      const r = await applyChanges(changes, actor);
+      const r = await applyChanges(changes, actor, { fromClaude: true }); // shown as suggestions until someone keeps or edits them
       const cards = await listCards();
       const links = [...new Set(r.applied.map((a) => a.card))].map((id) => { const c = cards.find((x) => x.id === id)!; const l = stagingLinks(c); return `${id}: ${[l.badge, l.engagement, l.page].filter(Boolean).join(" · ")}`; });
       return text(`Applied ${r.applied.length} change(s).\n${r.pushed.map((p) => `✓ ${p}`).join("\n")}${r.errors.length ? `\n✗ ${r.errors.join("\n✗ ")}` : ""}\nStaging: ${links.join("\n")}\nNow suggest the next step to the user.`, r.errors.length > 0 && r.applied.length === 0);

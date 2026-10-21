@@ -31,6 +31,9 @@ export type CardRecord = {
   brief?: { source?: string; trackerId?: string } & Record<string, string | undefined>;
   // how the card is set up beyond its texts (Setup step): engagement, page module, reward, back image
   setup?: CardSetup;
+  // texts nobody on the team has confirmed yet ("<key>:<en|de>"): written by Claude or
+  // prefilled from another card. Shown in italics until someone keeps or edits them.
+  suggested?: Record<string, { by: "claude" | "prefill"; from?: string; at: string }>;
   updatedAt: string;
   log: { at: string; by: string; summary: string }[];
 };
@@ -166,6 +169,37 @@ export const saveCardsPublic = saveCards;
 // A card imported from the tracker that has no badge on staging yet.
 export const onStaging = (c: CardRecord) => !!c.staging.badgeId;
 
+// texts confirmed as they are: the suggestion marks go (all, or the given "<key>:<loc>")
+export async function acceptSuggested(id: string, keys: string[] | null, by: string): Promise<CardRecord> {
+  const cards = await listCards();
+  const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  if (!card) throw new Error("card not found");
+  const n = Object.keys(card.suggested ?? {}).length;
+  if (!keys) card.suggested = {};
+  else for (const k of keys) delete card.suggested?.[k];
+  card.updatedAt = new Date().toISOString();
+  card.log = [{ at: card.updatedAt, by, summary: keys ? `Kept ${keys.length} suggested text${keys.length === 1 ? "" : "s"}` : `Kept all ${n} suggested texts` }, ...card.log].slice(0, 50);
+  await saveCards(cards);
+  return card;
+}
+
+// Removes a card from Ktulu. What Ktulu built on staging for it (a disabled card and its
+// engagement) goes too; anything that existed on staging before is left alone.
+export async function deleteCard(id: string, by: string): Promise<{ removed: string; staging: string[] }> {
+  const cards = await listCards();
+  const card = cards.find((c) => c.id.toLowerCase() === id.toLowerCase());
+  if (!card) throw new Error("card not found");
+  const builtHere = !!card.brief?.builtOnStaging || card.log.some((l) => /^Built on staging/.test(l.summary));
+  const staging: string[] = [];
+  if (card.staging.badgeId && builtHere) {
+    await stg(`/badges/${card.staging.badgeId}`, { method: "DELETE" }).then(() => staging.push("card")).catch(() => null);
+    if (card.staging.engagementId) await stg(`/engagements/${card.staging.engagementId}`, { method: "DELETE" }).then(() => staging.push("engagement")).catch(() => null);
+  }
+  await saveCards(cards.filter((c) => c !== card));
+  console.log(`[teamcards] ${by} deleted ${card.id} ${card.name}${staging.length ? ` (+ staging ${staging.join(", ")})` : ""}`);
+  return { removed: card.id, staging };
+}
+
 // ---- prefill: texts from a similar card ----------------------------------------
 const plainName = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const mechOf = (c: CardRecord) => c.setup?.engagement?.type || c.mechanic || "";
@@ -208,6 +242,8 @@ export async function prefillFrom(id: string, fromId: string, by: string): Promi
     if (!from?.en?.trim() && !from?.de?.trim()) continue;
     if (cur.en?.trim() || cur.de?.trim()) continue;
     me.values[f.key] = { en: swap(from.en ?? ""), de: swap(from.de ?? "") };
+    me.suggested = me.suggested ?? {};
+    for (const l of ["en", "de"] as Loc[]) if ((from as LocValue)[l]?.trim()) me.suggested[`${f.key}:${l}`] = { by: "prefill", from: src.id, at: new Date().toISOString() };
     filled.push(f.label);
   }
   me.updatedAt = new Date().toISOString();
@@ -218,15 +254,17 @@ export async function prefillFrom(id: string, fromId: string, by: string): Promi
 
 // A new card made in Ktulu (guided setup): next free TC number, only the brief
 // so far; texts, engagement and module follow step by step.
-export async function createCard(input: { name: string; badgeType?: string; campaign?: string; race?: string }, by: string): Promise<CardRecord> {
+export async function createCard(input: { name: string; badgeType?: string; campaign?: string; race?: string; test?: boolean }, by: string): Promise<CardRecord> {
   const name = input.name.trim();
   if (!name) throw new Error("Give the card a name first");
   const cards = await listCards();
   if (cards.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`A card called “${name}” exists already`);
   const max = Math.max(0, ...cards.map((c) => (/^TC-(\d+)$/.exec(c.id) ? Number(/^TC-(\d+)$/.exec(c.id)![1]) : 0)));
+  if (input.test && cards.some((c) => c.id === "TC-000")) throw new Error("TC-000 is in use: delete the old test card first");
   const at = new Date().toISOString();
   const rec: CardRecord = {
-    id: `TC-${String(max + 1).padStart(3, "0")}`,
+    // a test card gets TC-000 (free once it is deleted again)
+    id: input.test ? "TC-000" : `TC-${String(max + 1).padStart(3, "0")}`,
     name,
     status: "Briefed",
     staging: { badgeId: "" },
@@ -285,7 +323,7 @@ export async function readChangeset(id: string): Promise<Change[] | null> {
 // Writes the changes into the records and pushes them to staging, one
 // PATCH per document and locale. Staging is the test system, so the page
 // with the module is published there after the update.
-export async function applyChanges(changes: Change[], by: string): Promise<{ applied: DiffRow[]; pushed: string[]; errors: string[] }> {
+export async function applyChanges(changes: Change[], by: string, opts: { fromClaude?: boolean } = {}): Promise<{ applied: DiffRow[]; pushed: string[]; errors: string[] }> {
   const cards = await listCards();
   const { rows, errors } = diff(cards, changes);
   const pushed: string[] = [];
@@ -326,6 +364,11 @@ export async function applyChanges(changes: Change[], by: string): Promise<{ app
       }
       for (const r of list) {
         const f = fieldByKey(r.key)!;
+        // a text Claude wrote stays marked as a suggestion; one a person wrote or kept is theirs
+        const mark = `${f.key}:${r.locale ?? "en"}`;
+        card.suggested = card.suggested ?? {};
+        if (opts.fromClaude) card.suggested[mark] = { by: "claude", at: new Date().toISOString() };
+        else delete card.suggested[mark];
         if (f.localized) card.values[f.key] = { ...((card.values[f.key] as LocValue) ?? {}), [r.locale as Loc]: String(r.after) };
         else card.values[f.key] = r.after as string | boolean;
       }

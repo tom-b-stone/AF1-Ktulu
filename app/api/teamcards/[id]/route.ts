@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
-import { applyChanges, diff, engagementPreview, getCard, listCards, rawDocs, reloadCard, stagingLinks, type Change } from "@/lib/teamCards";
+import { acceptSuggested, applyChanges, deleteCard, diff, engagementPreview, getCard, listCards, rawDocs, reloadCard, stagingLinks, type Change } from "@/lib/teamCards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,6 +23,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!session?.user?.email) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const b = (await req.json().catch(() => null)) as { action?: string; changes?: Change[] } | null;
   try {
+    // { action: "accept", keys? } → suggested texts kept as they are · { action: "delete" } → card removed
+    if (b?.action === "accept") {
+      const card = await acceptSuggested(params.id, (b as unknown as { keys?: string[] }).keys ?? null, session.user.email);
+      return NextResponse.json({ card: { ...card, links: stagingLinks(card) } });
+    }
+    if (b?.action === "delete") return NextResponse.json(await deleteCard(params.id, session.user.email));
     if (b?.action === "reload") {
       const card = await reloadCard(params.id);
       return card ? NextResponse.json({ card: { ...card, links: stagingLinks(card) } }) : NextResponse.json({ error: "not found" }, { status: 404 });

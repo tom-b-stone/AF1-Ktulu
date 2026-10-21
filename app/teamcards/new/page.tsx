@@ -41,6 +41,7 @@ export default function NewCard() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [figmaImage, setFigmaImage] = useState(false);
+  const [test, setTest] = useState(false);
 
   useEffect(() => {
     fetch("/api/teamcards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "types" }) })
@@ -84,7 +85,7 @@ export default function NewCard() {
   const create = async () => {
     setBusy(true);
     setErr("");
-    const j = await fetch("/api/teamcards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "new", name }) })
+    const j = await fetch("/api/teamcards", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "new", name, test }) })
       .then((r) => r.json())
       .catch(() => ({ error: "Network error" }));
     setBusy(false);
@@ -134,6 +135,10 @@ export default function NewCard() {
               <button className="btn btn-primary" disabled={!name.trim() || busy}>
                 {busy ? "Creating …" : "Create the card"}
               </button>
+              <label style={{ flexBasis: "100%", display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "var(--muted)" }}>
+                <input type="checkbox" checked={test} onChange={(e) => setTest(e.target.checked)} />
+                Test card: gets TC-000, delete it on its overview when you are done
+              </label>
             </form>
           ),
         };
@@ -278,7 +283,7 @@ export default function NewCard() {
       default:
         return null;
     }
-  }, [step, name, busy, types, camps, camp, pages, card]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, name, busy, types, camps, camp, pages, card, test]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ display: "grid", gap: 18, maxWidth: 720 }}>

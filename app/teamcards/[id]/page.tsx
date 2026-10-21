@@ -18,7 +18,9 @@ import { HINTS, LANES, STEPS, kindOf, stationsFor, type Lane, type Station } fro
 type Json = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 type LV = { en: string; de: string };
 type Values = Record<string, LV>;
+type Sug = { by: "claude" | "prefill"; from?: string; at: string };
 type Card = {
+  suggested?: Record<string, Sug>;
   id: string;
   name: string;
   status: string;
@@ -132,6 +134,11 @@ export default function EditCard() {
   const [askBusy, setAskBusy] = useState(false);
   const [actMsg, setActMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [prefill, setPrefill] = useState(false);
+  // texts Claude wrote or prefilled from another card: italic until someone keeps or edits them
+  const keep = async (keys: string[] | null) => {
+    const j = await fetch(`/api/teamcards/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "accept", keys }) }).then((x) => x.json()).catch(() => null);
+    if (j?.card && card) setCard({ ...card, suggested: j.card.suggested ?? {} });
+  };
   useEffect(() => {
     fetch(`/api/teamcards/${id}/from-prod`).then((r) => r.json()).then((j) => setProd(j.prod ?? null)).catch(() => {});
   }, [id]);
@@ -694,6 +701,14 @@ export default function EditCard() {
                   </button>
                 </span>
               </div>
+              {Object.keys(card.suggested ?? {}).length > 0 && (
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 13, color: "#c9c3e6" }}>
+                  <i>{Object.keys(card.suggested ?? {}).length} texts are suggestions (Claude or prefilled), shown in italics until someone keeps or edits them.</i>
+                  <button style={btn()} onClick={() => void keep(null)}>
+                    Keep all
+                  </button>
+                </div>
+              )}
               {prefill && (
                 <div style={{ display: "grid", gap: 8, padding: 14, borderRadius: 12, border: `1px solid ${C.line2}` }}>
                   <span style={{ fontSize: 13 }}>Take the texts of a similar card into the empty fields. Its name becomes {card.name}. Nothing goes to staging.</span>
@@ -718,6 +733,28 @@ export default function EditCard() {
               )}
             </div>
             </section>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() =>
+                  setAsk2({
+                    title: `Delete ${card.id} ${card.name}?`,
+                    body: card.links.badge && (row?.brief?.builtOnStaging || (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary)))
+                      ? "The card goes from Ktulu, and the disabled card and engagement Ktulu built on staging are deleted too. A module on a page stays until someone removes it in the CMS. This can't be undone."
+                      : "The card goes from Ktulu. Nothing on staging or production is touched. This can't be undone.",
+                    ok: "Yes, delete it",
+                    run: async () => {
+                      const j = await fetch(`/api/teamcards/${card.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete" }) }).then((r) => r.json()).catch(() => ({ error: "Network error" }));
+                      if (j.error) return `Not deleted: ${j.error}`;
+                      setTimeout(() => (window.location.href = "/teamcards"), 1200);
+                      return `Deleted${j.staging?.length ? ` (on staging: ${j.staging.join(", ")})` : ""}. Back to all cards …`;
+                    },
+                  })
+                }
+                style={{ all: "unset", cursor: "pointer", fontSize: 12.5, color: "#e06c5b" }}
+              >
+                Delete this card
+              </button>
+            </div>
           </div>
         );
       })()}
@@ -903,6 +940,8 @@ export default function EditCard() {
               focused={focus === k}
               value={{ en: textOf(k, "en"), de: textOf(k, "de") }}
               initial={initial[k] ?? { en: "", de: "" }}
+              suggested={{ en: card.suggested?.[`${k}:en`], de: card.suggested?.[`${k}:de`] }}
+              onKeep={(l) => void keep([`${k}:${l}`])}
               where={whereUsed(k)}
               issues={{ en: issuesOf(k, "en"), de: issuesOf(k, "de") }}
               onFocus={() => setFocus(k)}
@@ -957,8 +996,9 @@ const GUIDE: { step: string; section?: number; title: string; todo: string }[] =
 
 // one field in the drawer: label, what it is, EN + DE, counters, rules (lexicon + other cards: in the review)
 function FieldBox({
-  k, focused, value, initial, where, issues, onFocus, onChange, onBlur, onSave,
+  k, focused, value, initial, where, issues, onFocus, onChange, onBlur, onSave, suggested, onKeep,
 }: {
+  suggested?: Partial<Record<Loc, Sug>>; onKeep?: (l: Loc) => void;
   k: string; focused: boolean; value: LV; initial: LV; where: string[]; issues: Record<Loc, string[]>;
   onFocus: () => void; onChange: (l: Loc, v: string) => void; onBlur: (l: Loc) => void; onSave: () => void;
 }) {
@@ -990,6 +1030,8 @@ function FieldBox({
       {(["en", "de"] as Loc[]).map((l) => {
         const bad = own(l).length > 0 || over(l);
         const miss = l === "de" && deMissing;
+        // still the suggestion (not edited here): italic, with who suggested it and "Keep"
+        const sug = suggested?.[l] && value[l] === initial[l] && value[l].trim() ? suggested[l] : undefined;
         return (
           <div key={l} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr)", gap: 8, alignItems: "start" }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: miss ? C.lava : C.mute, paddingTop: 9 }}>{l.toUpperCase()}</span>
@@ -1002,8 +1044,16 @@ function FieldBox({
                 onFocus={onFocus}
                 onChange={(e) => onChange(l, e.target.value)}
                 onBlur={() => onBlur(l)}
-                style={{ width: "100%", minHeight: 0, height: "auto", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 8, border: `1px solid ${bad ? "rgba(224,108,91,.7)" : miss ? "rgba(255,45,0,.45)" : C.line2}`, background: "#0f0f12", color: C.fg, fontFamily: "inherit" }}
+                style={{ fontStyle: sug ? "italic" : undefined, width: "100%", minHeight: 0, height: "auto", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 8, border: `1px solid ${bad ? "rgba(224,108,91,.7)" : miss ? "rgba(255,45,0,.45)" : C.line2}`, background: "#0f0f12", color: sug ? "#c9c3e6" : C.fg, fontFamily: "inherit" }}
               />
+              {sug && (
+                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: "#a99fd8" }}>
+                  <i>{sug.by === "claude" ? "Suggested by Claude" : `Prefilled from ${sug.from ?? "another card"}`}, not confirmed yet</i>
+                  <button onClick={() => onKeep?.(l)} style={{ all: "unset", cursor: "pointer", textDecoration: "underline", color: C.fg }}>
+                    Keep
+                  </button>
+                </div>
+              )}
               {(bad || focused) && (
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
                   <span role={bad ? "alert" : undefined} style={{ color: "#e06c5b" }}>{own(l).join(" · ")}</span>
