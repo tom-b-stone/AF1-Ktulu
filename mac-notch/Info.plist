@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>AF1 Notch</string>
-  <key>CFBundleDisplayName</key><string>AF1 Notch</string>
+  <key>CFBundleName</key><string>AF1 Asset Tool</string>
+  <key>CFBundleDisplayName</key><string>AF1 Asset Tool</string>
   <key>CFBundleIdentifier</key><string>digital.slash.af1notch</string>
   <key>CFBundleExecutable</key><string>AF1Notch</string>
   <key>CFBundlePackageType</key><string>APPL</string>

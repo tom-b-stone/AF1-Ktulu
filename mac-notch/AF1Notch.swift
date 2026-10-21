@@ -1,4 +1,4 @@
-// AF1 Notch — the Asset Uploader on the MacBook notch.
+// AF1 Asset Tool — the Asset Uploader on the MacBook notch.
 //
 // Drag photos onto the notch, pick the Grand Prix and the session folder,
 // "Continue in Ktulu": the photos go to Ktulu (an inbox, one day) and the Asset
@@ -187,14 +187,26 @@ let ICON_W: CGFloat = 34
 // frosted glass behind the window (the desktop shows through, blurred), a dark tint for contrast,
 // a thin light edge and a soft drop shadow
 struct VisualEffect: NSViewRepresentable {
+  // SwiftUI opacity does not reach a behind-window blur, so it fades itself
+  var visible = true
   func makeNSView(context: Context) -> NSVisualEffectView {
     let v = NSVisualEffectView()
     v.material = .hudWindow
     v.blendingMode = .behindWindow
     v.state = .active
+    v.wantsLayer = true
+    v.alphaValue = visible ? 1 : 0
     return v
   }
-  func updateNSView(_ v: NSVisualEffectView, context: Context) {}
+  func updateNSView(_ v: NSVisualEffectView, context: Context) {
+    let to: CGFloat = visible ? 1 : 0
+    if v.alphaValue == to { return }
+    NSAnimationContext.runAnimationGroup { c in
+      c.duration = visible ? 0.28 : 0.18
+      c.timingFunction = CAMediaTimingFunction(name: visible ? .easeOut : .easeIn)
+      v.animator().alphaValue = to
+    }
+  }
 }
 // ---- one shape that morphs: notch → note → panel ---------------------------------
 // The window never changes size (no flicker). It covers the area the panel can
@@ -237,22 +249,23 @@ struct Geometry {
   func rect(_ stage: Stage, photos: Bool) -> CGRect {
     let mid = CANVAS.width / 2, e = ear(stage)
     switch stage {
-    case .closed: return CGRect(x: mid - notch.width / 2 - e, y: 0, width: notch.width + 2 * e, height: notch.height)
+    case .closed:
+      // the notch, extended to the left for the icon (and to the right for the photo count)
+      let left = notch.width / 2 + ICON_W + e, right = notch.width / 2 + (photos ? 56 : 0) + e
+      return CGRect(x: mid - left, y: 0, width: left + right, height: notch.height)
     case .note: return CGRect(x: mid - NOTE_W / 2 - e, y: 0, width: NOTE_W + 2 * e, height: notch.height + 40)
     case .open: return CGRect(x: mid - PANEL.width / 2 - e, y: 0, width: PANEL.width + 2 * e, height: PANEL.height)
     }
   }
   // what reacts to the mouse: the shape, plus the icon left of the notch (and the count right of it) when closed
   func hit(_ stage: Stage, photos: Bool) -> CGRect {
-    let r = rect(stage, photos: photos)
-    guard stage == .closed else { return r }
-    return CGRect(x: r.minX - ICON_W, y: 0, width: r.width + ICON_W + (photos ? 56 : 0), height: r.height)
+    rect(stage, photos: photos)
   }
   // where the icon sits: left of the notch, then in the note, then in the panel's header (and how big)
   func icon(_ stage: Stage, in r: CGRect) -> (CGPoint, CGFloat) {
     let e = ear(stage)
     switch stage {
-    case .closed: return (CGPoint(x: -ICON_W / 2 + 4, y: notch.height / 2), 18)
+    case .closed: return (CGPoint(x: e + ICON_W / 2 + 2, y: notch.height / 2), 18)
     case .note: return (CGPoint(x: e + 30, y: notch.height + 20), 24)
     case .open: return (CGPoint(x: e + 34, y: 48), 28)
     }
@@ -273,19 +286,17 @@ struct NotchView: View {
     let e = g.ear(stage)
     let shape = NotchShape(ear: e, bottom: g.radius(stage))
     ZStack(alignment: .topLeading) {
-      // background: black like the notch when closed, frosted glass when open
+      // background: solid black like the notch when closed (it extends the notch), frosted glass when open
       ZStack {
-        VisualEffect()
+        VisualEffect(visible: stage != .closed)
         Color.black.opacity(stage == .closed ? 1 : stage == .note ? 0.5 : 0.66)
       }
       .clipShape(shape)
-      // closed: nothing but the icon is visible (no black block, whatever the screen)
-      .opacity(stage == .closed ? 0 : 1)
       .overlay(shape.stroke(Color.white.opacity(stage == .closed ? 0 : 0.12), lineWidth: 1))
       .shadow(color: .black.opacity(stage == .closed ? 0 : 0.5), radius: 16, x: 0, y: 10)
 
       // the note
-      Text(m.token.isEmpty ? "Connect AF1 Notch with Ktulu" : "Drop photos · \(m.race?.label ?? "Asset Uploader")")
+      Text(m.token.isEmpty ? "Connect AF1 Asset Tool with Ktulu" : "Drop photos · \(m.race?.label ?? "Asset Uploader")")
         .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white).lineLimit(1)
         .frame(width: NOTE_W - 70, alignment: .leading)
         .position(x: e + 50 + (NOTE_W - 70) / 2, y: g.notch.height + 20)
@@ -304,7 +315,7 @@ struct NotchView: View {
       if stage == .closed && !m.photos.isEmpty {
         Text("\(m.photos.count)").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
           .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(LAVA_STRONG))
-          .position(x: r.width + 26, y: g.notch.height / 2)
+          .position(x: r.width - e - 28, y: g.notch.height / 2)
           .transition(.opacity)
       }
 
@@ -318,12 +329,12 @@ struct NotchView: View {
         .contentShape(Circle())
       }
       .buttonStyle(.plain)
-      .help("AF1 Notch: drop photos here or click to choose")
+      .help("AF1 Asset Tool: drop photos here or click to choose")
       .position(iconAt)
     }
     .frame(width: r.width, height: r.height, alignment: .topLeading)
     .clipShape(Rectangle().offset(x: -60, y: -40).size(width: r.width + 120, height: r.height + 80))
-    .contentShape(Rectangle().offset(x: stage == .closed ? -ICON_W : 0).size(width: r.width + (stage == .closed ? ICON_W + 56 : 0), height: r.height))
+    .contentShape(Rectangle())
     .onHover { h in
       pending?.cancel()
       let work = DispatchWorkItem {
@@ -357,8 +368,10 @@ struct Expanded: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 10) {
         Color.clear.frame(width: 26, height: 1) // the icon lands here
-        Text("AF1 Notch").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
-        Text("Asset Uploader").font(.system(size: 12)).foregroundColor(MUTED)
+        Text("AF1 Asset Tool").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+        // Ktulu's mark, as in the web app
+        Text("^(;,;)^").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundColor(Color(red: 1, green: 0.27, blue: 0.1))
+          .help("Hands over to Ktulu")
         Spacer()
         Button { withAnimation(MOTION) { m.expand(false) } } label: { Image(systemName: "chevron.up").foregroundColor(MUTED) }.buttonStyle(.plain).help("Close")
       }
@@ -511,7 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let open = NSMenuItem(title: "Open", action: #selector(openPanel), keyEquivalent: ""); open.target = self; menu.addItem(open)
     let conn = NSMenuItem(title: "Connect with Ktulu …", action: #selector(openConnect), keyEquivalent: ""); conn.target = self; menu.addItem(conn)
     menu.addItem(.separator())
-    menu.addItem(withTitle: "Quit AF1 Notch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    menu.addItem(withTitle: "Quit AF1 Asset Tool", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     status.menu = menu
     Task { await model.load() }
   }

@@ -32,7 +32,7 @@ const SIDEBARS: Record<string, Section[]> = {
     },
     {
       title: "Mac app",
-      entries: [{ href: "/assets/notch", label: "AF1 Notch", note: "download", hint: "Drop photos on the notch", exact: true }],
+      entries: [{ href: "/assets/notch", label: "AF1 Asset Tool", note: "download", hint: "Drop photos on the notch", exact: true }],
     },
     {
       title: "Help",

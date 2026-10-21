@@ -1,6 +1,6 @@
 "use client";
 
-// AF1 Notch: the Asset Uploader on the MacBook notch. Download, install,
+// AF1 Asset Tool: the Asset Uploader on the MacBook notch. Download, install,
 // connect. The app only collects (images + Grand Prix + folder); the Asset
 // Uploader here does the rest.
 import { useEffect, useState } from "react";
@@ -40,7 +40,7 @@ export default function NotchApp() {
       <section className="page-head">
         <div>
           <div className="section-label" style={{ marginBottom: 8 }}>Asset Uploader · Mac app</div>
-          <h1>AF1 Notch</h1>
+          <h1>AF1 Asset Tool</h1>
           <p>Drag photos onto the notch of your MacBook, pick the Grand Prix and the folder, and the Asset Uploader opens with everything in place: WebP, alt texts by Claude, names and tags as always.</p>
         </div>
       </section>
@@ -51,8 +51,8 @@ export default function NotchApp() {
           <div>
             <b>Download</b>
             <p style={p}>For Macs with Apple silicon (M1 or newer), macOS 14 or newer.</p>
-            <a className="btn btn-primary" href="/downloads/af1-notch.zip" download style={{ marginTop: 10 }}>
-              Download AF1 Notch (.zip)
+            <a className="btn btn-primary" href="/downloads/af1-asset-tool.zip" download style={{ marginTop: 10 }}>
+              Download AF1 Asset Tool (.zip)
             </a>
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function NotchApp() {
           <span style={num}>2</span>
           <div>
             <b>Install</b>
-            <p style={p}>Open the .zip and drag <i>AF1 Notch</i> into your Applications folder.</p>
+            <p style={p}>Open the .zip and drag <i>AF1 Asset Tool</i> into your Applications folder.</p>
           </div>
         </div>
         <div style={step}>
@@ -68,7 +68,7 @@ export default function NotchApp() {
           <div>
             <b>Allow it once</b>
             <p style={p}>
-              The app is not from the App Store, so macOS stops it the first time. Open it, click <i>Done</i> in the warning, then go to System Settings → Privacy &amp; Security, scroll down to “AF1 Notch was blocked” and click <i>Open Anyway</i>. From then on it starts normally.
+              The app is not from the App Store, so macOS stops it the first time. Open it, click <i>Done</i> in the warning, then go to System Settings → Privacy &amp; Security, scroll down to “AF1 Asset Tool was blocked” and click <i>Open Anyway</i>. From then on it starts normally.
             </p>
           </div>
         </div>
@@ -93,7 +93,7 @@ export default function NotchApp() {
                 </button>
               )}
             </div>
-            {token && <p style={{ ...p, fontSize: 13 }}>If the browser asks to open AF1 Notch, allow it. Otherwise copy the key and use “Token …” in the AF1 menu at the top right of your screen.</p>}
+            {token && <p style={{ ...p, fontSize: 13 }}>If the browser asks to open AF1 Asset Tool, allow it. Otherwise copy the key and use “Token …” in the AF1 menu at the top right of your screen.</p>}
           </div>
         </div>
         <div style={step}>
