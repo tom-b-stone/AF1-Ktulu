@@ -52,6 +52,12 @@ const TILES: { title: string; href: string; key: string; external?: boolean; tex
     text: "Cropped, rounded variants for the CRM email templates.",
   },
   {
+    title: "Race Coverage",
+    href: "/coverage",
+    key: "/coverage",
+    text: "Race weekend coverage. Placeholder, not built yet.",
+  },
+  {
     title: "UTM Studio",
     href: "https://af1-utm-studio.vercel.app/",
     key: "/utm",

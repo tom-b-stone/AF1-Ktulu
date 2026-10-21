@@ -253,6 +253,7 @@ export const MORPH_PRESETS: Record<string, Omit<MorphProps, "size">> = {
   "/photobook": { shape: "sphere", seed: 5.3, freq: 2.1, amp: 0.2, hue: 0.9 },
   "/teamcards": { shape: "box", seed: 3.4, freq: 1.7, amp: 0.18, hue: 0.55 },
   "/images": { shape: "octa", seed: 7.7, freq: 0.9, amp: 0.16, hue: 0.42 },
+  "/coverage": { shape: "sphere", seed: 6.4, freq: 1.3, amp: 0.15, hue: 0.12 },
   "/utm": { shape: "capsule", seed: 2.6, freq: 1.4, amp: 0.1, hue: 0.62 },
   "/connector": { shape: "knot", seed: 9.2, freq: 1.6, amp: 0.08, hue: 0.8 },
 };

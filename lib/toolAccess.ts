@@ -26,6 +26,7 @@ export const TOOL_LABEL: Record<string, string> = {
   "/teamcards": "Team Cards",
   "/figma": "Team Cards · Figma Sync",
   "/images": "CRM Images",
+  "/coverage": "Race Coverage",
 };
 
 export const RELEASE: Record<string, { status: ReleaseStatus; paths: string[]; mcp?: RegExp }> = {
@@ -37,6 +38,7 @@ export const RELEASE: Record<string, { status: ReleaseStatus; paths: string[]; m
   // Figma Sync inside Team Cards (plugin + its page): everyone who can sign in (the plugin authenticates with a personal token)
   "/figma": { status: "live", paths: ["/teamcards/figma", "/figma", "/api/sitemap"], mcp: /^sitemap_/ },
   "/images": { status: "plan", paths: ["/images"] },
+  "/coverage": { status: "plan", paths: ["/coverage", "/api/coverage"] },
 };
 
 // The first test group (Oct 2026): seeds the access board in /admin/access once.

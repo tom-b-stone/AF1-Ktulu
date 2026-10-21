@@ -17,6 +17,7 @@ export const TOOLS: { href: string; key: string; name: string; status: "working"
   { href: "/photobook", key: "/photobook", name: "GP Mini-Zine", status: "staging", text: "GP zine to print, fold and colour in + fan page" },
   { href: "/teamcards", key: "/teamcards", name: "Team Card Configurator", status: "staging", text: "Cards, guided edit, journey preview, helper" },
   { href: "/images", key: "/images", name: "CRM Images", status: "planned", text: "Email template image variants" },
+  { href: "/coverage", key: "/coverage", name: "Race Coverage", status: "planned", text: "Race weekend coverage (placeholder)" },
   { href: "https://af1-utm-studio.vercel.app/", key: "/utm", name: "UTM Studio", status: "external", external: true, text: "Campaign links (own app)" },
 ];
 
