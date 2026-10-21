@@ -108,6 +108,14 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
 
     // 3 setup: reward, back image, engagement, where the module sits
     const setup = card.setup ?? {};
+    card.setup = setup;
+    // an engagement needs a page for its module: without one, the campaign's work-in-progress
+    // page "WiP | <campaign> | Modules" (a draft) takes it until the real page exists
+    const hasTask = (setup.engagement && setup.engagement.type !== "page") || !!card.staging.engagementId;
+    if (hasTask && !setup.module?.pageId) {
+      const wip = await wipPage(camp?.name ?? "", steps);
+      if (wip) setup.module = { pageId: wip.id, pageUrl: wip.url, pageTitle: wip.title };
+    }
     doc.rewardType = setup.reward?.type || card.rewardType || "noReward";
     if (doc.rewardType === "raffleSignup" && !(doc.raffleSubmitLabel?.en)) doc.raffleSubmitLabel = { en: "Enter the raffle", de: "Am Gewinnspiel teilnehmen" };
     doc.badgeBackImage = setup.backImageId || idOf(doc.badgeBackImage);
@@ -275,4 +283,21 @@ async function placeModule(card: CardRecord, badgeId: string, engagementId: stri
   const blockId = (again.sections ?? []).find(isOurs)?.id;
   steps.push({ step: `module ${at >= 0 ? "updated" : "placed"} on /${en.url ?? pageId} (draft version, not published)`, ok: true, link: `${ADMIN}/pages/${pageId}` });
   return blockId;
+}
+
+// the campaign's work-in-progress page for modules without a real page yet (draft)
+async function wipPage(campaign: string, steps: CopyStep[]): Promise<{ id: string; url: string; title: string } | null> {
+  const name = campaign || "No campaign";
+  const title = `WiP | ${name} | Modules`;
+  const slug = `wip-${name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-modules`;
+  try {
+    const found = (await stg(`/pages?where[slug][equals]=${encodeURIComponent(slug)}&limit=1&depth=0&draft=true`)).docs?.[0];
+    if (found) return { id: found.id, url: found.url ?? slug, title };
+    const doc = (await stg(`/pages?draft=true&locale=en`, { method: "POST", body: JSON.stringify({ title, slug, authRequirement: "PUBLIC", sections: [], _status: "draft" }) })).doc;
+    steps.push({ step: `page "${title}" created (draft) for modules without a page yet`, ok: true, link: `${ADMIN}/pages/${doc.id}` });
+    return { id: doc.id, url: doc.url ?? slug, title };
+  } catch (e) {
+    steps.push({ step: "no work-in-progress page: module not placed", ok: false, detail: e instanceof Error ? e.message.slice(0, 200) : String(e) });
+    return null;
+  }
 }

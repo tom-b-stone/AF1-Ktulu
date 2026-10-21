@@ -240,9 +240,14 @@ export default function EditCard() {
       const mid = v && typeof v === "object" ? v.id : v;
       if (mid) out[k] = `/api/sitemap/media/${mid}`;
     }
-    if (!out["badge:badgeImage"] && card?.imageUrl) out["badge:badgeImage"] = card.imageUrl;
+    // the card's own artwork first; a card Ktulu built carries its template's image on staging,
+    // so without its own artwork it shows the "not defined yet" template, never another card's image
+    const builtHere = !!row?.brief?.builtOnStaging || (row?.log ?? []).some((l: { summary: string }) => /^Built on staging/.test(l.summary)) || !card?.links?.badge;
+    if (card?.imageUrl) out["badge:badgeImage"] = card.imageUrl;
+    else if (builtHere || !out["badge:badgeImage"]) out["badge:badgeImage"] = cardTemplate(card?.name);
+    if (!out["badge:badgeBackImage"] || (builtHere && !(row?.setup as Json)?.backImageId)) out["badge:badgeBackImage"] = cardTemplate(card?.name);
     return out;
-  }, [card]);
+  }, [card, row]);
 
   // ---- editing ------------------------------------------------------------
   const setText = useCallback((k: string, l: Loc, v: string) => setVals((cur) => ({ ...cur, [k]: { ...(cur[k] ?? { en: "", de: "" }), [l]: v } })), []);
