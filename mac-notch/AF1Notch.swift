@@ -133,7 +133,7 @@ final class Model: ObservableObject {
     for u in urls where (UTType(filenameExtension: u.pathExtension)?.conforms(to: .image) ?? false) && !photos.contains(where: { $0.url == u }) {
       photos.append(Photo(url: u, thumb: thumbnail(u, 120).map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }))
     }
-    if !photos.isEmpty { withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { expand(true) } }
+    if !photos.isEmpty { withAnimation(MOTION) { expand(true) } }
   }
 
   private func post(_ body: [String: Any]) async throws -> [String: Any] {
@@ -196,88 +196,124 @@ struct VisualEffect: NSViewRepresentable {
   }
   func updateNSView(_ v: NSVisualEffectView, context: Context) {}
 }
-struct Glass: ViewModifier {
-  let radius: CGFloat
-  func body(content: Content) -> some View {
-    let shape = UnevenRoundedRectangle(bottomLeadingRadius: radius, bottomTrailingRadius: radius)
-    return content
-      .background(ZStack { VisualEffect(); Color.black.opacity(0.42) }.clipShape(shape))
-      .overlay(shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
-      .compositingGroup()
-      .shadow(color: .black.opacity(0.5), radius: 16, x: 0, y: 10)
+// ---- one shape that morphs: notch → note → panel ---------------------------------
+// The window never changes size (no flicker). It covers the area the panel can
+// grow into, and lets every click through except where the shape is.
+enum Stage { case closed, note, open }
+let CANVAS = CGSize(width: 640, height: 430)
+let NOTE_W: CGFloat = 400
+let PANEL = CGSize(width: 560, height: 360)
+let MOTION = Animation.spring(response: 0.46, dampingFraction: 0.86)
+
+struct Geometry {
+  let notch: CGSize
+  // the shape's frame in the window (origin top left)
+  func rect(_ stage: Stage, photos: Bool) -> CGRect {
+    let mid = CANVAS.width / 2
+    switch stage {
+    case .closed:
+      let left = notch.width / 2 + ICON_W, right = notch.width / 2 + (photos ? 58 : 2)
+      return CGRect(x: mid - left, y: 0, width: left + right, height: notch.height)
+    case .note: return CGRect(x: mid - NOTE_W / 2, y: 0, width: NOTE_W, height: notch.height + 40)
+    case .open: return CGRect(x: mid - PANEL.width / 2, y: 0, width: PANEL.width, height: PANEL.height)
+    }
+  }
+  // where the icon sits: beside the notch, then in the note, then in the panel's header (and how big)
+  func icon(_ stage: Stage, in r: CGRect) -> (CGPoint, CGFloat) {
+    switch stage {
+    case .closed: return (CGPoint(x: ICON_W / 2 + 2, y: notch.height / 2), 18)
+    case .note: return (CGPoint(x: 30, y: notch.height + 20), 24)
+    case .open: return (CGPoint(x: 34, y: 48), 28)
+    }
   }
 }
+
 struct NotchView: View {
   @ObservedObject var m: Model
+  let g: Geometry
   @State private var target = false
   @State private var pending: DispatchWorkItem?
-  let notch: CGSize
+
+  var stage: Stage { m.expanded ? .open : m.peek ? .note : .closed }
 
   var body: some View {
-    ZStack(alignment: .top) {
-      if m.expanded {
-        Expanded(m: m)
-          .frame(width: 560, height: 360)
-          .modifier(Glass(radius: 22))
-          .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-      } else if m.peek {
-        Button { m.pickFiles() } label: {
-          HStack(spacing: 8) {
-            Image(systemName: m.token.isEmpty ? "link" : "arrow.down.to.line").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
-            Text(m.token.isEmpty ? "Connect AF1 Notch with Ktulu" : "Drop photos · \(m.race?.label ?? "Asset Uploader")")
-              .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white).lineLimit(1)
-          }
-          .padding(.top, notch.height + 6).padding(.bottom, 9).padding(.horizontal, 16)
-          .frame(minWidth: notch.width + 40)
-          .modifier(Glass(radius: 16))
-        }
-        .buttonStyle(.plain)
-        .help("Click to choose photos, or drag them here")
-        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .top)))
-      } else {
-        // the notch plus a small permanent icon on its left: the hotspot to hover, click or drop on
-        HStack(spacing: 0) {
-          Button { m.pickFiles() } label: {
-            ZStack {
-              Circle().fill(LAVA_STRONG).frame(width: 18, height: 18)
-              Image(systemName: m.token.isEmpty ? "link" : "photo.on.rectangle.angled").font(.system(size: 9, weight: .bold)).foregroundColor(.white)
-            }
-            .frame(width: ICON_W, height: notch.height)
-            .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .help("AF1 Notch: drop photos here or click to choose")
-          Spacer(minLength: 0)
-          if !m.photos.isEmpty {
-            Text("\(m.photos.count)").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-              .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(LAVA_STRONG)).padding(.trailing, 10)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: notch.height)
-        .background(UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10).fill(Color.black))
+    let r = g.rect(stage, photos: !m.photos.isEmpty)
+    let (iconAt, iconSize) = g.icon(stage, in: r)
+    let radius: CGFloat = stage == .open ? 22 : stage == .note ? 16 : 10
+    let shape = UnevenRoundedRectangle(bottomLeadingRadius: radius, bottomTrailingRadius: radius)
+    ZStack(alignment: .topLeading) {
+      // background: black like the notch when closed, frosted glass when open
+      ZStack {
+        VisualEffect()
+        Color.black.opacity(stage == .closed ? 1 : 0.42)
       }
+      .clipShape(shape)
+      .overlay(shape.strokeBorder(Color.white.opacity(stage == .closed ? 0 : 0.14), lineWidth: 1))
+      .shadow(color: .black.opacity(stage == .closed ? 0 : 0.5), radius: 16, x: 0, y: 10)
+
+      // the note
+      Text(m.token.isEmpty ? "Connect AF1 Notch with Ktulu" : "Drop photos · \(m.race?.label ?? "Asset Uploader")")
+        .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white).lineLimit(1)
+        .frame(width: NOTE_W - 70, alignment: .leading)
+        .position(x: 50 + (NOTE_W - 70) / 2, y: g.notch.height + 20)
+        .opacity(stage == .note ? 1 : 0)
+        .animation(stage == .note ? MOTION.delay(0.08) : .easeOut(duration: 0.1), value: stage)
+
+      // the panel's content
+      Expanded(m: m)
+        .frame(width: PANEL.width, height: PANEL.height, alignment: .top)
+        .opacity(stage == .open ? 1 : 0)
+        .animation(stage == .open ? .easeOut(duration: 0.22).delay(0.14) : .easeOut(duration: 0.08), value: stage)
+        .allowsHitTesting(stage == .open)
+
+      // photo count while closed
+      if stage == .closed && !m.photos.isEmpty {
+        Text("\(m.photos.count)").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+          .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(LAVA_STRONG))
+          .position(x: r.width - 30, y: g.notch.height / 2)
+          .transition(.opacity)
+      }
+
+      // the icon: grows and moves from beside the notch into the note and the panel
+      Button { if stage != .open { m.pickFiles() } } label: {
+        ZStack {
+          Circle().fill(LAVA_STRONG)
+          Image(systemName: m.token.isEmpty ? "link" : "photo.on.rectangle.angled").font(.system(size: iconSize * 0.48, weight: .bold)).foregroundColor(.white)
+        }
+        .frame(width: iconSize, height: iconSize)
+        .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .help("AF1 Notch: drop photos here or click to choose")
+      .position(iconAt)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    // opens only after resting on the notch for a moment (passing through the menu bar does nothing);
-    // dragging files onto it opens at once
+    .frame(width: r.width, height: r.height, alignment: .topLeading)
+    .clipShape(Rectangle().offset(x: -40, y: -40).size(width: r.width + 80, height: r.height + 80))
+    .contentShape(shape)
     .onHover { h in
       pending?.cancel()
       let work = DispatchWorkItem {
-        if h { if !m.expanded { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { m.setPeek(true) } } }
+        if h { if !m.expanded { withAnimation(MOTION) { m.setPeek(true) } } }
         else {
-          withAnimation(.easeIn(duration: 0.18)) { m.setPeek(false) }
-          if m.photos.isEmpty && m.sending == nil { withAnimation(.easeIn(duration: 0.2)) { m.expand(false) } }
+          withAnimation(MOTION) {
+            m.setPeek(false)
+            if m.photos.isEmpty && m.sending == nil { m.expand(false) }
+          }
         }
       }
       pending = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + (h ? 0.35 : 0.5), execute: work)
+      DispatchQueue.main.asyncAfter(deadline: .now() + (h ? 0.3 : 0.45), execute: work)
     }
-    .onDrop(of: [.fileURL], isTargeted: Binding(get: { target }, set: { v in target = v; if v { withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { m.expand(true) } } })) { providers in
+    .onDrop(of: [.fileURL], isTargeted: Binding(get: { target }, set: { v in target = v; if v { withAnimation(MOTION) { m.expand(true) } } })) { providers in
       for p in providers {
         _ = p.loadObject(ofClass: URL.self) { url, _ in if let url { DispatchQueue.main.async { m.add([url]) } } }
       }
       return true
     }
+    .offset(x: r.minX, y: r.minY)
+    .animation(MOTION, value: stage)
+    .animation(MOTION, value: m.photos.isEmpty)
+    .frame(width: CANVAS.width, height: CANVAS.height, alignment: .topLeading)
   }
 }
 
@@ -286,10 +322,11 @@ struct Expanded: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 10) {
+        Color.clear.frame(width: 26, height: 1) // the icon lands here
         Text("AF1 Notch").font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
         Text("Asset Uploader").font(.system(size: 12)).foregroundColor(MUTED)
         Spacer()
-        Button { withAnimation { m.expand(false) } } label: { Image(systemName: "chevron.up").foregroundColor(MUTED) }.buttonStyle(.plain).help("Close")
+        Button { withAnimation(MOTION) { m.expand(false) } } label: { Image(systemName: "chevron.up").foregroundColor(MUTED) }.buttonStyle(.plain).help("Close")
       }
       .padding(.top, 38)
 
@@ -407,25 +444,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea { notch = CGSize(width: screen.frame.width - l.width - r.width, height: screen.safeAreaInsets.top) }
     self.screen = screen
     self.notch = notch
-    let start = rect(for: .collapsed)
-    panel = NotchPanel(contentRect: start, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    // one fixed window over the area the panel can grow into; it never resizes, so nothing flickers
+    let f = screen.frame
+    let frame = NSRect(x: f.midX - CANVAS.width / 2, y: f.maxY - CANVAS.height, width: CANVAS.width, height: CANVAS.height)
+    panel = NotchPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     panel.level = .statusBar
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
     panel.backgroundColor = .clear
     panel.isOpaque = false
     panel.hasShadow = false
     panel.isMovable = false
-    let host = NSHostingView(rootView: NotchView(m: model, notch: notch))
+    panel.ignoresMouseEvents = true
+    let host = NSHostingView(rootView: NotchView(m: model, g: Geometry(notch: notch)))
     host.autoresizingMask = [.width, .height]
     panel.contentView = host
-    // the window is only ever as big as what is visible: the notch, the small note, or the panel
     model.onExpand = { [weak self] on in
       guard let self else { return }
       if on { NSApp.activate(ignoringOtherApps: true); self.panel.makeKey() }
-      self.layout()
+      self.track()
     }
+    panel.setFrame(frame, display: true)
     panel.orderFrontRegardless()
-    layout()
+    // clicks pass through everywhere except the visible shape (checked 20× a second)
+    Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.track() }
+    }
 
     status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     status.button?.title = "AF1"
@@ -440,34 +483,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   var screen: NSScreen!
   var notch = CGSize(width: 200, height: 32)
-  enum Size { case collapsed, peek, full }
 
-  func rect(for size: Size) -> NSRect {
-    let f = screen.frame
-    let wh: CGSize
-    switch size {
-    case .collapsed:
-      // the notch, the icon on its left, the photo count on its right
-      let left = notch.width / 2 + ICON_W, right = notch.width / 2 + (model.photos.isEmpty ? 2 : 58)
-      return NSRect(x: f.midX - left, y: f.maxY - notch.height, width: left + right, height: notch.height)
-    case .peek: wh = CGSize(width: max(notch.width + 60, 380) + 48, height: notch.height + 40 + 34)
-    case .full: wh = CGSize(width: 560 + 48, height: 360 + 36)
-    }
-    return NSRect(x: f.midX - wh.width / 2, y: f.maxY - wh.height, width: wh.width, height: wh.height)
-  }
-
-  // growing happens at once; shrinking waits for the closing animation
-  func layout() {
-    let size: Size = model.expanded ? .full : model.peek ? .peek : .collapsed
-    let target = rect(for: size)
-    if target.width >= panel.frame.width { panel.setFrame(target, display: true) }
-    else {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { [weak self] in
-        guard let self else { return }
-        let now: Size = self.model.expanded ? .full : self.model.peek ? .peek : .collapsed
-        self.panel.setFrame(self.rect(for: now), display: true)
-      }
-    }
+  // the shape's rect on screen, a little padded so hover feels forgiving
+  func track() {
+    let stage: Stage = model.expanded ? .open : model.peek ? .note : .closed
+    let r = Geometry(notch: notch).rect(stage, photos: !model.photos.isEmpty)
+    let top = panel.frame.maxY, left = panel.frame.minX
+    let onScreen = NSRect(x: left + r.minX, y: top - r.maxY, width: r.width, height: r.height).insetBy(dx: -6, dy: -6)
+    let inside = onScreen.contains(NSEvent.mouseLocation) || model.sending != nil
+    if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
   }
 
   @objc func openPanel() { withAnimation { model.expand(true) } }
