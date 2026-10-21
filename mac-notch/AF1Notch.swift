@@ -341,7 +341,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   var panel: NotchPanel!
   var status: NSStatusItem!
   let model = Model()
-  var collapsed = NSRect.zero
 
   func applicationWillFinishLaunching(_ n: Notification) {
     // af1notch://connect?token=… from Ktulu's "Connect the app"
@@ -370,9 +369,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main!
     var notch = CGSize(width: 200, height: 32)
     if let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea { notch = CGSize(width: screen.frame.width - l.width - r.width, height: screen.safeAreaInsets.top) }
-    let size = CGSize(width: 600, height: 380)
-    let frame = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height, width: size.width, height: size.height)
-    panel = NotchPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    self.screen = screen
+    self.notch = notch
+    let start = rect(for: .collapsed)
+    panel = NotchPanel(contentRect: start, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     panel.level = .statusBar
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
     panel.backgroundColor = .clear
@@ -380,17 +380,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     panel.hasShadow = false
     panel.isMovable = false
     let host = NSHostingView(rootView: NotchView(m: model, notch: notch))
-    host.frame = NSRect(origin: .zero, size: size)
+    host.autoresizingMask = [.width, .height]
     panel.contentView = host
-    collapsed = NSRect(x: frame.midX - notch.width / 2 - 30, y: frame.maxY - notch.height, width: notch.width + 60, height: notch.height)
+    // the window is only ever as big as what is visible: the notch, the small note, or the panel
     model.onExpand = { [weak self] on in
       guard let self else { return }
       if on { NSApp.activate(ignoringOtherApps: true); self.panel.makeKey() }
-      self.updateClickThrough()
+      self.layout()
     }
     panel.orderFrontRegardless()
-    updateClickThrough()
-    Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] _ in Task { @MainActor in self?.updateClickThrough() } }
+    layout()
 
     status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     status.button?.title = "AF1"
@@ -403,10 +402,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     Task { await model.load() }
   }
 
-  // outside the notch the panel lets clicks through while collapsed, so the menu bar keeps working
-  func updateClickThrough() {
-    let near = collapsed.insetBy(dx: -20, dy: -12).contains(NSEvent.mouseLocation)
-    panel.ignoresMouseEvents = !(model.expanded || model.peek || near)
+  var screen: NSScreen!
+  var notch = CGSize(width: 200, height: 32)
+  enum Size { case collapsed, peek, full }
+
+  func rect(for size: Size) -> NSRect {
+    let f = screen.frame
+    let wh: CGSize
+    switch size {
+    case .collapsed: wh = CGSize(width: notch.width + (model.photos.isEmpty ? 8 : 64), height: notch.height)
+    case .peek: wh = CGSize(width: max(notch.width + 60, 380), height: notch.height + 40)
+    case .full: wh = CGSize(width: 580, height: 372)
+    }
+    return NSRect(x: f.midX - wh.width / 2, y: f.maxY - wh.height, width: wh.width, height: wh.height)
+  }
+
+  // growing happens at once; shrinking waits for the closing animation
+  func layout() {
+    let size: Size = model.expanded ? .full : model.peek ? .peek : .collapsed
+    let target = rect(for: size)
+    if target.width >= panel.frame.width { panel.setFrame(target, display: true) }
+    else {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { [weak self] in
+        guard let self else { return }
+        let now: Size = self.model.expanded ? .full : self.model.peek ? .peek : .collapsed
+        self.panel.setFrame(self.rect(for: now), display: true)
+      }
+    }
   }
 
   @objc func openPanel() { withAnimation { model.expand(true) } }
