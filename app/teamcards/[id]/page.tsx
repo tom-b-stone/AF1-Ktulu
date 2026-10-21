@@ -41,7 +41,7 @@ type Hit = { id: string; card: string | null; cardName: string; key: string; loc
 type Ask = { key: string; lang: Loc; from: string; to: string; oldP: string; newP: string; hits: Hit[]; stage: 0 | 1 | 2 };
 type Cross = Record<string, { key: string; locale: Loc; value: string }[]>;
 
-const C = { bg: "#0c0c0e", panel: "#141417", line: "#26262b", line2: "#34343b", fg: "#e7e5e4", mute: "#8b8a91", lava: "#ff2d00", ok: "#6fcf7c" };
+const C = { bg: "#0c0c0e", panel: "#141417", line: "#26262b", line2: "#34343b", fg: "#e7e5e4", mute: "#a3a6ab", lava: "#ff2d00", lavaBtn: "#d92600", ok: "#6fcf7c" };
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const getPath = (o: Json, p: (string | number)[]) => p.reduce((a: Json, k) => (a == null ? undefined : a[k]), o);
 const words = (v: string) => v.trim().split(/\s+/).filter(Boolean).length;
@@ -403,7 +403,7 @@ export default function EditCard() {
           </Link>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 650, letterSpacing: "-.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.name}</div>
-            <div style={{ fontSize: 11.5, color: C.mute }}>
+            <div style={{ fontSize: 12.5, color: C.mute }}>
               {card.id} · {kind === "qa" ? "Text answer" : kind === "hot" ? "Hot or not" : "Multiple choice"} · staging{" "}
               <a href={card.links.badge} target="_blank" rel="noreferrer" style={{ color: C.mute }}>card ↗</a>
               {card.links.page && (
@@ -426,7 +426,7 @@ export default function EditCard() {
             <button aria-label="Smaller screens" style={{ ...btn(), padding: "0 8px" }} onClick={() => setScale((s) => Math.max(0.4, +(s - 0.08).toFixed(2)))}>
               <Icon d={I.minus} />
             </button>
-            <span style={{ fontSize: 11, color: C.mute, width: 34, textAlign: "center" }}>{Math.round(scale * 100)}%</span>
+            <span style={{ fontSize: 12, color: C.mute, width: 34, textAlign: "center" }}>{Math.round(scale * 100)}%</span>
             <button aria-label="Bigger screens" style={{ ...btn(), padding: "0 8px" }} onClick={() => setScale((s) => Math.min(1, +(s + 0.08).toFixed(2)))}>
               <Icon d={I.plus} />
             </button>
@@ -460,9 +460,9 @@ export default function EditCard() {
                 aria-current={on ? "step" : undefined}
                 style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 12px", borderRadius: 999, border: `1px solid ${on ? C.lava : C.line}`, background: on ? "rgba(255,45,0,.1)" : C.panel, color: on ? "#fff" : C.fg, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap" }}
               >
-                <span style={{ width: 18, height: 18, borderRadius: 99, display: "grid", placeItems: "center", fontSize: 10.5, fontWeight: 700, background: n.issues ? "rgba(224,108,91,.2)" : n.changed ? "rgba(255,45,0,.25)" : "#27272a", color: n.issues ? "#e06c5b" : "#fff" }}>{n.issues ? "!" : i + 1}</span>
+                <span style={{ width: 20, height: 20, borderRadius: 99, display: "grid", placeItems: "center", fontSize: 12.5, fontWeight: 700, background: n.issues ? "rgba(224,108,91,.2)" : n.changed ? "rgba(255,45,0,.25)" : "#27272a", color: n.issues ? "#e06c5b" : "#fff" }}>{n.issues ? "!" : i + 1}</span>
                 {s.title}
-                {n.changed > 0 && <span style={{ fontSize: 10.5, color: C.lava }}>{n.changed} changed</span>}
+                {n.changed > 0 && <span style={{ fontSize: 12.5, color: C.lava }}>{n.changed} changed</span>}
               </button>
             );
           })}
@@ -470,7 +470,7 @@ export default function EditCard() {
         {guide !== null && (
           <div role="region" aria-label="Guided setup" style={{ margin: `0 ${drawer ? 484 : 24}px 10px 24px`, transition: "margin .28s cubic-bezier(.22,1,.36,1)", padding: "10px 14px", borderRadius: 12, border: `1px solid rgba(255,45,0,.45)`, background: "rgba(255,45,0,.06)", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 2, flex: "1 1 360px", minWidth: 0 }}>
-              <span style={{ fontSize: 11.5, color: C.mute }}>
+              <span style={{ fontSize: 12.5, color: C.mute }}>
                 Guided setup · step {guide + 2} of {GUIDE.length + 1}
               </span>
               <span style={{ fontSize: 14 }}>
@@ -524,9 +524,9 @@ export default function EditCard() {
                 </div>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 14, overflowX: "auto", paddingBottom: 6, paddingTop: 10 }}>
                   {(ln === "out" || ln === "in") && (
-                    <div style={{ alignSelf: "center", flexShrink: 0, width: 110, textAlign: "center", fontSize: 11.5, color: C.mute }}>
+                    <div style={{ alignSelf: "center", flexShrink: 0, width: 110, textAlign: "center", fontSize: 12.5, color: C.mute }}>
                       <div style={{ width: 60, height: 60, margin: "0 auto 12px", transform: "rotate(45deg)", border: `1px solid ${L.edge}`, borderRadius: 8, display: "grid", placeItems: "center" }}>
-                        <span style={{ transform: "rotate(-45deg)", fontSize: 11.5, color: C.fg, fontWeight: 600 }}>{ln === "out" ? "No" : "Yes"}</span>
+                        <span style={{ transform: "rotate(-45deg)", fontSize: 12.5, color: C.fg, fontWeight: 600 }}>{ln === "out" ? "No" : "Yes"}</span>
                       </div>
                       Logged in?
                     </div>
@@ -537,9 +537,9 @@ export default function EditCard() {
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                           <div>
                             <div style={{ fontSize: 12.5, fontWeight: 600 }}>{s.label}</div>
-                            <div style={{ fontSize: 11, color: C.mute }}>{s.note}</div>
+                            <div style={{ fontSize: 12, color: C.mute }}>{s.note}</div>
                           </div>
-                          {s.side && <span style={{ fontSize: 10, color: C.mute, border: `1px solid ${C.line2}`, borderRadius: 99, padding: "1px 7px", alignSelf: "start" }}>{s.side}</span>}
+                          {s.side && <span style={{ fontSize: 12, color: C.mute, border: `1px solid ${C.line2}`, borderRadius: 99, padding: "1px 7px", alignSelf: "start" }}>{s.side}</span>}
                         </div>
                         <div style={{ display: "flex", flexDirection: mode === "stack" ? "column" : "row", gap: 14 }}>{langs.map((l) => phone(s, l, langs.length > 1 ? l.toUpperCase() : undefined))}</div>
                       </div>
@@ -611,7 +611,7 @@ export default function EditCard() {
           ? `Fans ${how}${placement ? ` on the ${placement.replace(/^[^·]*·\s*/, "").replace(/\s*\(\/[^)]*\)/g, "").trim()} page` : ""}${question && !/^(page|link)$/.test(row?.mechanic ?? "") ? `: "${question.length > 110 ? question.slice(0, 110) + "…" : question}"` : ""}. ${reward ? `They get ${reward}.` : "No reward is set yet."}`
           : "How fans earn this card is not defined yet.";
         const last = row?.log?.[0] ? `${row.log[0].summary} · ${new Date(row.log[0].at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "No changes logged";
-        const lbl: CSSProperties = { fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: C.mute };
+        const lbl: CSSProperties = { fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", color: C.mute };
         return (
           <div style={{ padding: "22px 24px 60px", maxWidth: 1040, display: "grid", gap: 16 }}>
             {/* the card itself: image, name, type, campaign, how to earn, context */}
@@ -641,8 +641,8 @@ export default function EditCard() {
               </div>
               <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  {meta.core && <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: C.lava, color: "#fff" }}>CORE</span>}
-                  <span style={{ fontSize: 11.5, padding: "2px 9px", borderRadius: 999, border: `1px solid ${C.line2}`, color: typeLabel ? C.fg : C.mute, fontStyle: typeLabel ? undefined : "italic" }}>{typeLabel || "Card type not defined yet"}</span>
+                  {meta.core && <span style={{ fontSize: 12.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: C.lavaBtn, color: "#fff" }}>CORE</span>}
+                  <span style={{ fontSize: 12.5, padding: "2px 9px", borderRadius: 999, border: `1px solid ${C.line2}`, color: typeLabel ? C.fg : C.mute, fontStyle: typeLabel ? undefined : "italic" }}>{typeLabel || "Card type not defined yet"}</span>
                   <span style={{ fontSize: 12, color: C.mute, fontVariantNumeric: "tabular-nums" }}>{card.id}</span>
                 </div>
                 <div style={{ display: "grid", gap: 4 }}>
@@ -663,7 +663,7 @@ export default function EditCard() {
             <div aria-label="Status" role="group" style={{ gridColumn: "1 / -1", borderTop: `1px solid ${C.line}`, paddingTop: 18, display: "grid", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <span style={lbl}>Status</span>
-                <span style={{ fontSize: 11.5, padding: "3px 10px", borderRadius: 999, background: tone.bg, color: tone.fg, fontWeight: 600 }}>
+                <span style={{ fontSize: 12.5, padding: "3px 10px", borderRadius: 999, background: tone.bg, color: tone.fg, fontWeight: 600 }}>
                   {tone.label}{check.quick === "Missing" ? ` · ${check.missing.length}` : ""}
                 </span>
                 <span style={{ fontSize: 12, color: C.mute }}>Last change: {last}</span>
@@ -796,7 +796,7 @@ export default function EditCard() {
             <>
               <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: C.mute, fontSize: 11 }}>
+                  <tr style={{ textAlign: "left", color: C.mute, fontSize: 12 }}>
                     <th style={{ padding: 8 }}>Field · where</th>
                     <th style={{ padding: 8 }}>Before</th>
                     <th style={{ padding: 8 }}>After</th>
@@ -808,7 +808,7 @@ export default function EditCard() {
                       <td style={{ padding: 8 }}>
                         <button onClick={() => goTo(r.key)} style={{ all: "unset", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>{r.label}</button>
                         {r.locale ? ` · ${String(r.locale).toUpperCase()}` : ""}
-                        <div style={{ color: C.mute, fontSize: 11.5 }}>{whereUsed(r.key).join(" · ")}</div>
+                        <div style={{ color: C.mute, fontSize: 12.5 }}>{whereUsed(r.key).join(" · ")}</div>
                         {r.issues?.length > 0 && <div style={{ color: "#e06c5b", fontSize: 12 }}>{r.issues.join(" · ")}</div>}
                       </td>
                       <td style={{ padding: 8, color: C.mute, whiteSpace: "pre-wrap" }}>{String(initial[r.key]?.[r.locale as Loc] ?? r.before ?? "")}</td>
@@ -820,7 +820,7 @@ export default function EditCard() {
                       <tr key={cid + i} style={{ borderTop: `1px solid ${C.line}`, verticalAlign: "top" }}>
                         <td style={{ padding: 8 }}>
                           {labelOf(c.key)} · {c.locale.toUpperCase()}
-                          <div style={{ color: C.mute, fontSize: 11.5 }}>on {cid}</div>
+                          <div style={{ color: C.mute, fontSize: 12.5 }}>on {cid}</div>
                         </td>
                         <td style={{ padding: 8, color: C.mute, whiteSpace: "pre-wrap" }}>{(() => { const v = others.find((o) => o.id === cid)?.values[c.key]; return v && typeof v === "object" ? String(v[c.locale] ?? "") : ""; })()}</td>
                         <td style={{ padding: 8, whiteSpace: "pre-wrap" }}>{c.value}</td>
@@ -831,7 +831,7 @@ export default function EditCard() {
               </table>
               {review.errors.length > 0 && <div style={{ color: "#e06c5b", fontSize: 13 }}>{review.errors.join(" · ")}</div>}
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <button style={{ ...btn(), background: C.lava, borderColor: C.lava, color: "#fff", fontWeight: 600, height: 38, padding: "0 18px" }} disabled={!!busy} onClick={() => void apply()}>
+                <button style={{ ...btn(), background: C.lavaBtn, borderColor: C.lavaBtn, color: "#fff", fontWeight: 600, height: 38, padding: "0 18px" }} disabled={!!busy} onClick={() => void apply()}>
                   Apply to staging
                 </button>
                 <span style={{ fontSize: 12.5, color: C.mute }}>Writes the card, engagement and module on staging and republishes the page. Figma picks it up on its next sync.</span>
@@ -920,7 +920,7 @@ export default function EditCard() {
           style={{ position: "absolute", left: -34, top: "38%", width: 34, height: 132, borderRadius: "12px 0 0 12px", border: `1px solid ${C.line2}`, borderRight: 0, background: "#1b1b1f", color: C.fg, cursor: "pointer", display: "grid", placeItems: "center", gap: 6, padding: "10px 0" }}
         >
           <Icon d={drawer ? I.right : I.left} />
-          <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11.5, letterSpacing: ".06em" }}>Edit texts{changed.length ? ` · ${changed.length}` : ""}</span>
+          <span style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 12.5, letterSpacing: ".06em" }}>Edit texts{changed.length ? ` · ${changed.length}` : ""}</span>
         </button>
         <div style={{ padding: "16px 18px 10px", borderBottom: `1px solid ${C.line}`, display: "flex", alignItems: "start", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1022,7 +1022,7 @@ function FieldBox({
           {f?.label ?? k}
           {dirty && <span title="Changed, not saved yet" style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: C.lava, marginLeft: 6, verticalAlign: "middle" }} />}
         </div>
-        <span title={`Shown on ${where.join(", ")}`} style={{ fontSize: 10.5, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{where.join(" · ")}</span>
+        <span title={`Shown on ${where.join(", ")}`} style={{ fontSize: 12.5, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{where.join(" · ")}</span>
       </div>
       {h && (
         <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45 }}>{h.what}</div>
@@ -1034,7 +1034,7 @@ function FieldBox({
         const sug = suggested?.[l] && value[l] === initial[l] && value[l].trim() ? suggested[l] : undefined;
         return (
           <div key={l} style={{ display: "grid", gridTemplateColumns: "26px minmax(0,1fr)", gap: 8, alignItems: "start" }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: miss ? C.lava : C.mute, paddingTop: 9 }}>{l.toUpperCase()}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: ".06em", color: miss ? C.lava : C.mute, paddingTop: 9 }}>{l.toUpperCase()}</span>
             <div style={{ display: "grid", gap: 3 }}>
               <textarea
                 aria-label={`${f?.label ?? k} ${l.toUpperCase()}`}
@@ -1047,7 +1047,7 @@ function FieldBox({
                 style={{ fontStyle: sug ? "italic" : undefined, width: "100%", minHeight: 0, height: "auto", resize: "vertical", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 8, border: `1px solid ${bad ? "rgba(224,108,91,.7)" : miss ? "rgba(255,45,0,.45)" : C.line2}`, background: "#0f0f12", color: sug ? "#c9c3e6" : C.fg, fontFamily: "inherit" }}
               />
               {sug && (
-                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 11, color: "#a99fd8" }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12, color: "#a99fd8" }}>
                   <i>{sug.by === "claude" ? "Suggested by Claude" : `Prefilled from ${sug.from ?? "another card"}`}, not confirmed yet</i>
                   <button onClick={() => onKeep?.(l)} style={{ all: "unset", cursor: "pointer", textDecoration: "underline", color: C.fg }}>
                     Keep
@@ -1055,7 +1055,7 @@ function FieldBox({
                 </div>
               )}
               {(bad || focused) && (
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
                   <span role={bad ? "alert" : undefined} style={{ color: "#e06c5b" }}>{own(l).join(" · ")}</span>
                   <span style={{ color: over(l) ? "#e06c5b" : C.mute, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{count(l)}</span>
                 </div>
@@ -1067,7 +1067,7 @@ function FieldBox({
       {focused && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 34 }}>
           <span />
-          <button onClick={onSave} style={{ all: "unset", cursor: "pointer", fontSize: 11.5, color: C.mute, display: "inline-flex", gap: 5, alignItems: "center" }} title="Keep this EN/DE wording as an approved phrasing for this field">
+          <button onClick={onSave} style={{ all: "unset", cursor: "pointer", fontSize: 12.5, color: C.mute, display: "inline-flex", gap: 5, alignItems: "center" }} title="Keep this EN/DE wording as an approved phrasing for this field">
             <Icon d={I.book} size={13} /> Save to lexicon
           </button>
         </div>
@@ -1091,7 +1091,7 @@ function ScopeDialog({ ask, onClose, onNext }: { ask: Ask; onClose: () => void; 
   return (
     <div role="dialog" aria-modal="true" aria-label="Where else should this change?" style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,.55)", display: "grid", placeItems: "center" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 600, maxWidth: "calc(100vw - 32px)", borderRadius: 16, background: "#18181b", border: `1px solid ${C.line2}`, boxShadow: "0 30px 80px -20px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.06)", padding: 20, display: "grid", gap: 14 }}>
-        <div style={{ fontSize: 11, color: C.mute, letterSpacing: ".08em", textTransform: "uppercase" }}>
+        <div style={{ fontSize: 12, color: C.mute, letterSpacing: ".08em", textTransform: "uppercase" }}>
           Search and replace · {ask.lang.toUpperCase()} · step {ask.stage + 1} of 3
         </div>
         <div style={{ fontSize: 16, fontWeight: 650 }}>{title}</div>
@@ -1103,7 +1103,7 @@ function ScopeDialog({ ask, onClose, onNext }: { ask: Ask; onClose: () => void; 
             <label key={i.id} style={{ display: "flex", gap: 10, alignItems: "start", fontSize: 13, padding: "7px 9px", borderRadius: 8, border: `1px solid ${C.line}` }}>
               <input type="checkbox" checked={picked.includes(i.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, i.id] : p.filter((x) => x !== i.id)))} style={{ marginTop: 3 }} />
               <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
-                <span style={{ fontSize: 11.5, color: C.mute }}>
+                <span style={{ fontSize: 12.5, color: C.mute }}>
                   {i.card ? `${i.cardName} · ` : ""}
                   {labelOf(i.key)}
                 </span>
@@ -1116,7 +1116,7 @@ function ScopeDialog({ ask, onClose, onNext }: { ask: Ask; onClose: () => void; 
           <button style={btn()} onClick={() => onNext([])}>
             Skip
           </button>
-          <button style={{ ...btn(), background: C.lava, borderColor: C.lava, color: "#fff", fontWeight: 600 }} onClick={() => onNext(picked)}>
+          <button style={{ ...btn(), background: C.lavaBtn, borderColor: C.lavaBtn, color: "#fff", fontWeight: 600 }} onClick={() => onNext(picked)}>
             Replace in {picked.length} text{picked.length === 1 ? "" : "s"}
           </button>
         </div>
@@ -1224,9 +1224,9 @@ function Consistency({
           <div style={{ padding: "10px 12px 4px", fontSize: 13, fontWeight: 600 }}>Buttons in this card</div>
           {mineButtons.map((b) => (
             <div key={b.k} style={{ ...cell, display: "grid", gap: 2 }}>
-              <button onClick={() => onGo(b.k)} style={{ all: "unset", cursor: "pointer", fontSize: 11.5, color: C.mute, textDecoration: "underline", textUnderlineOffset: 3 }}>{b.f?.label ?? b.k} · {where(b.k)[0] || b.f?.step}</button>
+              <button onClick={() => onGo(b.k)} style={{ all: "unset", cursor: "pointer", fontSize: 12.5, color: C.mute, textDecoration: "underline", textUnderlineOffset: 3 }}>{b.f?.label ?? b.k} · {where(b.k)[0] || b.f?.step}</button>
               <span>{b.v.en || <span style={{ color: "#e06c5b" }}>EN missing</span>} <span style={{ color: C.mute }}>/ {b.v.de || <span style={{ color: "#e06c5b" }}>DE missing</span>}</span></span>
-              {dupe(b.k, b.v.en) && <span style={{ fontSize: 11.5, color: "#ffb5a6" }}>Same label as another button: does it do the same?</span>}
+              {dupe(b.k, b.v.en) && <span style={{ fontSize: 12.5, color: "#ffb5a6" }}>Same label as another button: does it do the same?</span>}
             </div>
           ))}
         </section>
@@ -1247,11 +1247,11 @@ function Consistency({
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 10 }}>
             <div style={{ borderRadius: 10, border: `1px solid ${C.line}`, padding: "8px 10px" }}>
-              <div style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: C.mute }}>Now{x.whereNow ? ` · ${x.whereNow}` : ""}</div>
+              <div style={{ fontSize: 12.5, letterSpacing: ".08em", textTransform: "uppercase", color: C.mute }}>Now{x.whereNow ? ` · ${x.whereNow}` : ""}</div>
               <div style={{ fontSize: 13.5, marginTop: 4 }}>“{x.now.en}”{x.now.de ? <span style={{ color: C.mute }}> / “{x.now.de}”</span> : <span style={{ color: "#e06c5b" }}> / DE missing</span>}</div>
             </div>
             <div style={{ borderRadius: 10, border: "1px solid rgba(111,207,124,.45)", background: "rgba(111,207,124,.06)", padding: "8px 10px" }}>
-              <div style={{ fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: C.ok }}>Suggested</div>
+              <div style={{ fontSize: 12.5, letterSpacing: ".08em", textTransform: "uppercase", color: C.ok }}>Suggested</div>
               <div style={{ fontSize: 13.5, marginTop: 4 }}>“{x.next.en}”{x.next.de ? <span style={{ color: C.mute }}> / “{x.next.de}”</span> : null}</div>
             </div>
           </div>

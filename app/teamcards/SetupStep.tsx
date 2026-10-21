@@ -26,7 +26,7 @@ export type Setup = {
 };
 type Brief = Record<string, string | undefined>;
 
-const C = { panel: "#141417", line: "#26262b", line2: "#34343b", fg: "#e7e5e4", mute: "#8b8a91", lava: "#ff2d00", ok: "#6fcf7c" };
+const C = { panel: "#141417", line: "#26262b", line2: "#34343b", fg: "#e7e5e4", mute: "#a3a6ab", lava: "#ff2d00", lavaBtn: "#d92600", ok: "#6fcf7c" };
 const ENG: { key: EngType; title: string; text: string }[] = [
   { key: "page", title: "Page visit", text: "Fans open the page and get the card. No task." },
   { key: "hot-or-not", title: "Hot or Not", text: "Fans swipe through pictures and rate each one." },
@@ -61,7 +61,7 @@ async function compress(f: File): Promise<File> {
 function Upload({ label, url, onFile, busy }: { label: string; url?: string; onFile: (f: File) => void; busy?: boolean }) {
   return (
     <label style={{ display: "grid", gap: 6, justifyItems: "start", cursor: "pointer" }}>
-      <div style={{ width: 96, aspectRatio: "4 / 5", borderRadius: 8, border: `1px dashed ${url ? C.line2 : "#ff1fd2"}`, background: url ? `center/cover url(${url})` : "rgba(255,31,210,.08)", display: "grid", placeItems: "center", fontSize: 11, color: C.mute, textAlign: "center", padding: 4 }}>
+      <div style={{ width: 96, aspectRatio: "4 / 5", borderRadius: 8, border: `1px dashed ${url ? C.line2 : "#ff1fd2"}`, background: url ? `center/cover url(${url})` : "rgba(255,31,210,.08)", display: "grid", placeItems: "center", fontSize: 12, color: C.mute, textAlign: "center", padding: 4 }}>
         {busy ? "Uploading …" : url ? "" : "Add image"}
       </div>
       <span style={{ fontSize: 12, color: C.mute }}>{label}</span>
@@ -206,7 +206,7 @@ export default function SetupStep({
           {ENG.map((x) => (
             <button key={x.key} style={pill(eng.type === x.key)} onClick={() => setEng({ type: x.key, items: x.key === "q-and-a" ? eng.items.slice(0, 1) : eng.items })}>
               <b style={{ fontWeight: 600 }}>{x.title}</b>
-              <span style={{ fontSize: 11.5, color: C.mute }}>{x.text}</span>
+              <span style={{ fontSize: 12.5, color: C.mute }}>{x.text}</span>
             </button>
           ))}
         </div>
@@ -284,7 +284,7 @@ export default function SetupStep({
           {REWARD.map((x) => (
             <button key={x.key} style={pill(setup.reward?.type === x.key)} onClick={() => up((s) => ({ ...s, reward: { type: x.key } }))}>
               <b style={{ fontWeight: 600 }}>{x.title}</b>
-              <span style={{ fontSize: 11.5, color: C.mute }}>{x.text}</span>
+              <span style={{ fontSize: 12.5, color: C.mute }}>{x.text}</span>
             </button>
           ))}
         </div>
@@ -303,7 +303,7 @@ export default function SetupStep({
       )}
 
       <div style={{ position: "sticky", bottom: 0, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "12px 14px", borderRadius: 12, border: `1px solid ${C.line2}`, background: "rgba(20,20,23,.96)", boxShadow: "0 -12px 30px -18px rgba(0,0,0,.8)" }}>
-        <button style={{ ...smallBtn, height: 36, background: dirty ? C.lava : "transparent", borderColor: dirty ? C.lava : C.line2, fontWeight: 600 }} disabled={!!busy} onClick={() => void save(false)}>
+        <button style={{ ...smallBtn, height: 36, background: dirty ? C.lavaBtn : "transparent", borderColor: dirty ? C.lavaBtn : C.line2, fontWeight: 600 }} disabled={!!busy} onClick={() => void save(false)}>
           {busy === "save" ? "Saving …" : dirty ? "Save setup" : "Saved"}
         </button>
         {canBuild && (

@@ -194,7 +194,7 @@ export default function Page() {
                             }}
                             style={{ padding: 8, borderRadius: 8, fontSize: 13, whiteSpace: "pre-wrap", border: `1px solid ${decisions[d.key] === side ? "var(--accent)" : "var(--border)"}` }}
                           >
-                            <span style={{ fontSize: 11, color: "var(--muted)" }}>Keep {side === "figma" ? "Figma" : "CMS"}</span>
+                            <span style={{ fontSize: 12, color: "var(--muted)" }}>Keep {side === "figma" ? "Figma" : "CMS"}</span>
                             <br />
                             {short(side === "figma" ? d.figma : d.cms)}
                           </span>

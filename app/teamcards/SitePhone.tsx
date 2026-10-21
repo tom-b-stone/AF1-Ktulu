@@ -150,7 +150,7 @@ export const SitePhone = memo(function SitePhone({
   const h = height * scale;
   return (
     <div style={{ width: w + 16 * scale, flexShrink: 0, position: "relative" }}>
-      {tag && <span style={{ position: "absolute", top: -9, left: 14, zIndex: 2, fontSize: 10, fontWeight: 700, letterSpacing: ".06em", padding: "2px 7px", borderRadius: 99, background: "#18181b", border: "1px solid #3f3f46", color: "#d4d4d8" }}>{tag}</span>}
+      {tag && <span style={{ position: "absolute", top: -9, left: 14, zIndex: 2, fontSize: 12, fontWeight: 700, letterSpacing: ".06em", padding: "2px 7px", borderRadius: 99, background: "#18181b", border: "1px solid #3f3f46", color: "#d4d4d8" }}>{tag}</span>}
       <div style={{ borderRadius: 34 * scale, padding: 8 * scale, background: "#09090b", boxShadow: "0 18px 50px -18px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.08)" }}>
         <div style={{ width: w, height: h, borderRadius: 27 * scale, overflow: "hidden", background: "#f5f2f2", position: "relative" }}>
           <iframe ref={ref} name={id} title={id} srcDoc={doc} style={{ width: 390, height, border: 0, transform: `scale(${scale})`, transformOrigin: "0 0", display: "block" }} />

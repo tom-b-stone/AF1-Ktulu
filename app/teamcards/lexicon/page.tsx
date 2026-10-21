@@ -158,14 +158,14 @@ export default function Lexicon() {
               <div key={e.id} style={{ ...row, alignItems: "start" }}>
                 <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
                   <span style={{ fontSize: 14 }}>
-                    <b style={{ fontSize: 10.5, color: "var(--muted)", marginRight: 8 }}>EN</b>
+                    <b style={{ fontSize: 12.5, color: "var(--muted)", marginRight: 8 }}>EN</b>
                     {e.en || <i style={{ color: "var(--muted)" }}>empty</i>}
                   </span>
                   <span style={{ fontSize: 14 }}>
-                    <b style={{ fontSize: 10.5, color: "var(--muted)", marginRight: 8 }}>DE</b>
+                    <b style={{ fontSize: 12.5, color: "var(--muted)", marginRight: 8 }}>DE</b>
                     {e.de || <i style={{ color: "var(--muted)" }}>empty</i>}
                   </span>
-                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                  <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
                     {e.saved ? "Saved on purpose" : "Learned"}
                     {e.uses ? ` · used on ${e.uses} card${e.uses === 1 ? "" : "s"}` : ""}
                   </span>

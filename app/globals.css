@@ -10,13 +10,14 @@
   --bg-2: #171819;
   --surface: #1e2022;
   --fg: #f1f1f1;
-  --muted: #6c7074;
+  --muted: #a3a6ab; /* 6.7:1 on surface, readable at 12px */
   --border: #2a2c2f;
   --border-2: #393939;
   --font-heading: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --font-label: "Fahkwang", "Archivo", sans-serif;
   --accent: #ff2d00; /* AF1 lava red, same as audif1.com */
+  --accent-strong: #d92600; /* lava behind white text: 5:1 */
   /* Vapor palette, pulled from the home background image */
   --vapor-navy: #040d1a;
   --vapor-indigo: #222458;
@@ -31,7 +32,7 @@
   --border-hsl: 216 6% 17%;
   --accent-hsl: 11 100% 50%;
   --muted-hsl: 210 6% 13%;
-  --muted-fg-hsl: 210 4% 44%;
+  --muted-fg-hsl: 210 4% 66%;
   --popover-hsl: 210 6% 9%;
 }
 
@@ -52,8 +53,8 @@ h1 { font-size: 28px; margin: 0 0 6px; }
 .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 6px; padding: 9px 16px; font-family: var(--font-heading); font-size: 13px; line-height: 18px; font-weight: 500; text-decoration: none; cursor: pointer; border: 1px solid var(--border-2); background: var(--surface); color: var(--fg); transition: background 0.15s, border-color 0.15s, transform 0.1s; }
 .btn:hover { border-color: var(--muted); }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { background: #ff4a22; border-color: #ff4a22; }
+.btn-primary { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; font-weight: 600; }
+.btn-primary:hover { background: var(--accent); border-color: var(--accent); }
 .btn-outline-accent { border-color: var(--accent); }
 .btn[disabled], .btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
 .card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; }

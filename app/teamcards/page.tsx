@@ -175,7 +175,7 @@ export default function Page() {
         const t = QUICK_TONE[c.check.quick];
         return (
           <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-            <span style={{ justifySelf: "start", fontSize: 11, padding: "2px 8px", borderRadius: 999, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>
+            <span style={{ justifySelf: "start", fontSize: 12, padding: "2px 8px", borderRadius: 999, background: t.bg, color: t.fg, whiteSpace: "nowrap" }}>
               {t.label}
               {c.check.quick === "Missing" ? ` · ${c.check.missing.length}` : ""}
             </span>
@@ -197,7 +197,7 @@ export default function Page() {
       sortValue: (c) => typeOf(c),
       cell: (c) => (
         <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-          {c.meta.core && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "var(--accent)", color: "#fff", marginRight: 6 }}>CORE</span>}
+          {c.meta.core && <span style={{ fontSize: 12, fontWeight: 700, padding: "1px 6px", borderRadius: 999, background: "var(--accent-strong)", color: "#fff", marginRight: 6 }}>CORE</span>}
           {typeOf(c)}
         </span>
       ),
