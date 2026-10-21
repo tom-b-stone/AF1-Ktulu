@@ -202,7 +202,7 @@ export default function NewBatchPage() {
       const p = prepared[f.name + f.size];
       if (!p) continue;
       i++;
-      const row = { ...p.row, fileName: proposeFileName({ year: race.year, loc: race.loc, context: p.row.context as "" | "hero", nn: i, ext: p.row.mime === "image/webp" ? "webp" : "jpg" }) };
+      const row = { ...p.row, fileName: proposeFileName({ year: race.year, loc: race.loc, context: p.row.context as "" | "hero", nn: 0, ext: p.row.mime === "image/webp" ? "webp" : "jpg" }) };
       rows.push(row);
       await batchStore.putBlob(batchId, row.id, p.blob);
       await batchStore.putThumb(batchId, row.id, p.thumb);
@@ -227,6 +227,31 @@ export default function NewBatchPage() {
   }
 
   addFilesRef.current = addFiles;
+
+  // images handed over by the AF1 Notch Mac app (/assets?inbox=…): Grand Prix and
+  // folder come with them, then the usual steps (WebP, Claude alt texts, names, upload)
+  const [inbox, setInbox] = useState<{ count: number; loaded: number; error?: string } | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("inbox");
+    if (!id) return;
+    (async () => {
+      const meta = await fetch(`/api/assets/inbox/${id}`).then((r) => r.json()).catch(() => null);
+      if (!meta || meta.error) return setInbox({ count: 0, loaded: 0, error: meta?.error ?? "Could not read the hand-over from the Mac app" });
+      if (meta.round) setRound(Number(meta.round));
+      if (meta.session) setSession(String(meta.session));
+      const list = (meta.files as { id: string; name: string; mime: string; complete: boolean }[]).filter((f) => f.complete);
+      setInbox({ count: list.length, loaded: 0 });
+      const got: File[] = [];
+      for (const f of list) {
+        const blob = await fetch(`/api/assets/inbox/${id}?file=${f.id}`).then((r) => (r.ok ? r.blob() : null)).catch(() => null);
+        if (blob) got.push(new File([blob], f.name, { type: f.mime }));
+        setInbox({ count: list.length, loaded: got.length });
+      }
+      addFilesRef.current(got);
+      window.history.replaceState(null, "", "/assets");
+    })();
+  }, []);
+
   const totalBytes = files.reduce((n, f) => n + f.size, 0);
   const compressedBytes = Object.values(prepared).reduce((n, p) => n + p.blob.size, 0);
 
@@ -241,6 +266,12 @@ export default function NewBatchPage() {
       </section>
 
       <Steps current={step} done={step > 1 ? [1] : []} />
+
+      {inbox && (
+        <div role="status" style={{ margin: "0 0 16px", padding: "12px 14px", borderRadius: 10, border: `1px solid ${inbox.error ? "rgba(224,108,91,.5)" : "var(--border-2)"}`, background: "var(--bg-2)", fontSize: 13.5 }}>
+          {inbox.error ? inbox.error : inbox.loaded < inbox.count ? `Taking over ${inbox.count} images from the Mac app … ${inbox.loaded} of ${inbox.count}` : `${inbox.count} images from the Mac app, Grand Prix and folder already set. Check them and continue.`}
+        </div>
+      )}
 
       {step === 1 && (
         <section className="reveal">

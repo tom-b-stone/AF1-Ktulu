@@ -422,17 +422,21 @@ export async function createMediaFolder(name: string, parent: string | null): Pr
   return { id: json.doc.id, name: json.doc.name, parent: json.doc.folder ?? parent, path: name };
 }
 
-// Highest trailing _NN among files in a folder that start with `prefix`
-// (e.g. audif1_2026_ESP_GP_gallery), so numbering continues per folder.
+// Highest trailing _NN among files in a folder named `prefix`_NN (e.g.
+// audif1_2026_ESP_GP_gallery_paddock_03), so numbering continues per folder.
+// A file named exactly `prefix`.ext (no number) counts as 1. Returns 1 when
+// the name is still free.
 export async function nextNumberInFolder(folderId: string, prefix: string): Promise<number> {
+  prefix = prefix.replace(/_$/, "");
   const res = await payloadFetch(`/media?limit=500&depth=0&where[folder][equals]=${encodeURIComponent(folderId)}`);
   if (!res.ok) return 1;
   const json = (await res.json()) as { docs: { filename?: string }[] };
   let max = 0;
   for (const d of json.docs) {
     const f = d.filename ?? "";
-    if (!f.startsWith(prefix)) continue;
-    const m = f.match(/_(\d{2,3})\.[a-z0-9]+$/i);
+    if (f.replace(/\.[a-z0-9]+$/i, "") === prefix) { max = Math.max(max, 1); continue; }
+    if (!f.startsWith(prefix + "_")) continue;
+    const m = f.slice(prefix.length).match(/^_(\d{2,3})\.[a-z0-9]+$/i);
     if (m) max = Math.max(max, Number(m[1]));
   }
   return max + 1;

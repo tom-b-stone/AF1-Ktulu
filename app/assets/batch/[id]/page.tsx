@@ -227,7 +227,7 @@ export default function BatchPage() {
           loc: batch.loc,
           context: merged.context as Context | "",
           descriptor: merged.descriptor || descriptorFromAlt(merged.alt),
-          nn: i + 1,
+          nn: 0,
           ext: merged.mime === "image/webp" ? "webp" : "jpg",
         });
       }
@@ -441,6 +441,10 @@ export default function BatchPage() {
     }
     setBusy("Uploading…");
     const counters: Record<string, number> = {};
+    // a number only where it is needed: the same name twice in this upload, or already in the folder
+    const nameOf = (r: (typeof todo)[number]) => proposeFileName({ year: batch.year, loc: batch.loc, context: r.context as Context | "", descriptor: r.descriptor || descriptorFromAlt(r.alt) || "photo", nn: 0, ext: r.mime === "image/webp" ? "webp" : "jpg" }).replace(/\.[a-z0-9]+$/i, "");
+    const twice: Record<string, number> = {};
+    for (const r of todo) twice[nameOf(r)] = (twice[nameOf(r)] ?? 0) + 1;
     let ok = 0;
     const failures: string[] = [];
     let rows = batch.rows;
@@ -453,12 +457,14 @@ export default function BatchPage() {
         // batches of "bortoleto-garage" never collide on _01
         const descriptor = r.descriptor || descriptorFromAlt(r.alt) || "photo";
         const ext = r.mime === "image/webp" ? "webp" : "jpg";
-        const prefix = proposeFileName({ year: batch.year, loc: batch.loc, context: r.context as Context | "", descriptor, nn: 0, ext }).replace(/_00\.[a-z0-9]+$/i, "");
+        const prefix = proposeFileName({ year: batch.year, loc: batch.loc, context: r.context as Context | "", descriptor, nn: 0, ext }).replace(/\.[a-z0-9]+$/i, "");
         if (counters[prefix] == null) {
-          const j = await fetch(`/api/assets/next-number?folder=${encodeURIComponent(batch.targetFolderId)}&prefix=${encodeURIComponent(prefix + "_")}`).then((x) => x.json());
+          const j = await fetch(`/api/assets/next-number?folder=${encodeURIComponent(batch.targetFolderId)}&prefix=${encodeURIComponent(prefix)}`).then((x) => x.json());
           counters[prefix] = Number(j.next ?? 1);
         }
-        const nn = counters[prefix]++;
+        // free name, used once here: no number; otherwise _01, _02 … continuing in the folder
+        const unique = counters[prefix] === 1 && (twice[prefix] ?? 1) === 1;
+        const nn = unique ? 0 : counters[prefix]++;
         const finalName = proposeFileName({ year: batch.year, loc: batch.loc, context: r.context as Context | "", descriptor, nn, ext });
         const blob = await batchStore.getBlob(batch.id, r.id);
         if (!blob) throw new Error("image data missing in this browser");

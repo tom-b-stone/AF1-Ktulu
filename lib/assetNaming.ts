@@ -108,7 +108,8 @@ export function proposeFileName(opts: { year: number; loc: string; context?: Con
   if (opts.context) parts.push(opts.context);
   const d = opts.descriptor ? cleanDescriptor(opts.descriptor) : "";
   if (d) parts.push(d);
-  parts.push(String(opts.nn).padStart(2, "0"));
+  // the number only when a name would repeat (same name in the folder or twice in a batch); 0 = none
+  if (opts.nn > 0) parts.push(String(opts.nn).padStart(2, "0"));
   return `${parts.join("_")}.${opts.ext ?? "webp"}`;
 }
 

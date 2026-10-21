@@ -77,3 +77,30 @@ export async function resolvePluginToken(token: string): Promise<TokenRecord | n
   if (raw) return JSON.parse(raw) as TokenRecord;
   return resolveConnectorToken(token);
 }
+
+// AF1 Notch Mac app tokens (Asset Uploader). Separate keys again: connecting
+// the Mac app never breaks the Figma plugin or the claude.ai connector.
+const notchTokenKey = (h: string) => `notch:token:${h}`;
+const notchUserKey = (email: string) => `notch:user:${email.toLowerCase()}`;
+
+export async function createNotchToken(email: string): Promise<string> {
+  const old = await kvGet(notchUserKey(email));
+  if (old) await kvDel(notchTokenKey(old));
+  const token = randomBytes(24).toString("base64url");
+  await kvSet(notchTokenKey(hash(token)), JSON.stringify({ email, createdAt: new Date().toISOString() }));
+  await kvSet(notchUserKey(email), hash(token));
+  return token;
+}
+
+export async function notchTokenStatus(email: string): Promise<string | null> {
+  const h = await kvGet(notchUserKey(email));
+  if (!h) return null;
+  const raw = await kvGet(notchTokenKey(h));
+  return raw ? (JSON.parse(raw) as TokenRecord).createdAt : null;
+}
+
+export async function resolveNotchToken(token: string): Promise<TokenRecord | null> {
+  if (!token || token.length < 16) return null;
+  const raw = await kvGet(notchTokenKey(hash(token)));
+  return raw ? (JSON.parse(raw) as TokenRecord) : null;
+}
