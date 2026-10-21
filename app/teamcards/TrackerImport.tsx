@@ -1,14 +1,16 @@
 "use client";
 
 // One-way import from the ARF1 Team Cards Tracker: preview with duplicate
-// check, pick the new cards, import. Never writes to the tracker.
+// check, pick the new cards to add and the existing ones to update with the
+// texts that changed in the tracker. Never writes to the tracker.
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { createPortal } from "react-dom";
 import { SideButton } from "@/app/components/SidebarSlot";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
-type Card = { id: string; name: string; status: string; copyStatus: string; race?: string; match?: { cardId: string; reason: string } };
+type Update = { label: string; locale: "en" | "de" | null; before: string; after: string };
+type Card = { id: string; name: string; status: string; copyStatus: string; race?: string; match?: { cardId: string; reason: string }; updates?: Update[] };
 
 export default function TrackerImport({ onDone, side }: { onDone: () => void; side?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -16,6 +18,7 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
   const [needGoogle, setNeedGoogle] = useState(false);
   const [cards, setCards] = useState<Card[] | null>(null);
   const [pick, setPick] = useState<Set<string>>(new Set());
+  const [upd, setUpd] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [tracker, setTracker] = useState("");
 
@@ -32,6 +35,7 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
     setTracker(j.tracker);
     setCards(j.cards);
     setPick(new Set((j.cards as Card[]).filter((c) => !c.match).map((c) => c.id)));
+    setUpd(new Set((j.cards as Card[]).filter((c) => c.updates?.length).map((c) => c.id)));
   }
 
   // back from the Google consent screen with ?import=1
@@ -41,17 +45,25 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
 
   async function run() {
     setBusy(true);
-    const r = await fetch("/api/teamcards/tracker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "import", ids: [...pick] }) });
+    const r = await fetch("/api/teamcards/tracker", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "import", ids: [...pick], update: [...upd] }) });
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setMsg({ tone: "err", text: j.error ?? "Import failed" });
-    setMsg({ tone: "ok", text: `Imported ${j.added.length} card${j.added.length === 1 ? "" : "s"}${j.added.length ? `: ${j.added.join(", ")}` : ""}.${j.linked.length ? ` Linked to their tracker row: ${j.linked.join(", ")}.` : ""}${j.skipped.length ? ` Skipped as duplicates: ${j.skipped.join(", ")}.` : ""}` });
+    const parts = [
+      `Imported ${j.added.length} card${j.added.length === 1 ? "" : "s"}${j.added.length ? `: ${j.added.join(", ")}` : ""}.`,
+      j.updated?.length ? `Updated ${j.updated.join(", ")} (${j.changed} text${j.changed === 1 ? "" : "s"}, on staging too).` : "",
+      j.linked.length ? `Linked to their tracker row: ${j.linked.join(", ")}.` : "",
+      j.errors?.length ? `Not updated: ${j.errors.join("; ")}.` : "",
+    ];
+    setMsg({ tone: j.errors?.length ? "err" : "ok", text: parts.filter(Boolean).join(" ") });
     setCards(null);
     onDone();
   }
 
   const fresh = (cards ?? []).filter((c) => !c.match);
-  const dups = (cards ?? []).filter((c) => c.match);
+  const changed = (cards ?? []).filter((c) => c.match && c.updates?.length);
+  const dups = (cards ?? []).filter((c) => c.match && !c.updates?.length);
+  const toggle = (set: typeof setPick, id: string) => set((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
     <>
@@ -60,7 +72,7 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
           Import from tracker
         </SideButton>
       ) : (
-        <button className="btn" onClick={() => void preview()} title="Reads the ARF1 Team Cards Tracker (read only) and adds cards that are not in Ktulu yet">
+        <button className="btn" onClick={() => void preview()} title="Reads the ARF1 Team Cards Tracker (read only) adds new cards and updates the ones that changed">
           Import from tracker
         </button>
       )}
@@ -74,7 +86,7 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
               </button>
             </div>
             <p style={{ color: "var(--muted)", fontSize: 13, margin: "6px 0 14px" }}>
-              One way: the tracker is only read, never changed. New cards land in Ktulu with their copy from the tracker and are not on staging yet. Cards that already exist are not touched.
+              One way: the tracker is only read, never changed. New cards land in Ktulu with their copy from the tracker and are not on staging yet. Cards that already exist get the texts that changed in the tracker (in Ktulu and on staging) if you tick them; empty tracker cells never clear a text.
               {tracker && (
                 <>
                   {" "}
@@ -97,12 +109,12 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
             {cards && !busy && (
               <>
                 <div style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 6px" }}>
-                  {fresh.length} new · {dups.length} already in Ktulu
+                  {fresh.length} new · {changed.length} changed in the tracker · {dups.length} up to date
                 </div>
                 <div style={{ display: "grid", gap: 4 }}>
                   {fresh.map((c) => (
                     <label key={c.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 8px", borderRadius: 6, background: "rgba(255,255,255,.03)", fontSize: 13, cursor: "pointer" }}>
-                      <input type="checkbox" checked={pick.has(c.id)} onChange={() => setPick((p) => { const n = new Set(p); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} />
+                      <input type="checkbox" checked={pick.has(c.id)} onChange={() => toggle(setPick, c.id)} />
                       <strong style={{ width: 64 }}>{c.id}</strong>
                       <span style={{ flex: 1 }}>{c.name}</span>
                       <span style={{ color: "var(--muted)", fontSize: 12 }}>{[c.race, c.status].filter(Boolean).join(" · ")}</span>
@@ -110,9 +122,43 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
                   ))}
                   {fresh.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)" }}>Nothing new in the tracker.</div>}
                 </div>
+                {changed.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Update from the tracker</div>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      {changed.map((c) => (
+                        <div key={c.id} style={{ padding: "6px 8px", borderRadius: 6, background: "rgba(255,255,255,.03)", fontSize: 13 }}>
+                          <label style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer" }}>
+                            <input type="checkbox" checked={upd.has(c.id)} onChange={() => toggle(setUpd, c.id)} />
+                            <strong style={{ width: 64 }}>{c.match!.cardId}</strong>
+                            <span style={{ flex: 1 }}>{c.name}</span>
+                            <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                              {c.updates!.length} text{c.updates!.length === 1 ? "" : "s"}
+                            </span>
+                          </label>
+                          <details style={{ marginTop: 4, marginLeft: 26 }}>
+                            <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--muted)" }}>Show what changes</summary>
+                            <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                              {c.updates!.map((u, i) => (
+                                <div key={i} style={{ fontSize: 12, lineHeight: 1.45 }}>
+                                  <div style={{ color: "var(--muted)" }}>
+                                    {u.label}
+                                    {u.locale ? ` ${u.locale.toUpperCase()}` : ""}
+                                  </div>
+                                  {u.before && <div style={{ color: "#ff9a84", textDecoration: "line-through" }}>{u.before}</div>}
+                                  <div style={{ color: "#7fd6a2" }}>{u.after}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {dups.length > 0 && (
                   <details style={{ marginTop: 12 }}>
-                    <summary style={{ cursor: "pointer", fontSize: 13 }}>Duplicates, not imported ({dups.length})</summary>
+                    <summary style={{ cursor: "pointer", fontSize: 13 }}>Already in Ktulu, nothing changed ({dups.length})</summary>
                     <div style={{ display: "grid", gap: 2, marginTop: 6 }}>
                       {dups.map((c) => (
                         <div key={c.id} style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -124,8 +170,8 @@ export default function TrackerImport({ onDone, side }: { onDone: () => void; si
                 )}
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
                   <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
-                  <button className="btn btn-primary" disabled={!pick.size} onClick={() => void run()}>
-                    Import {pick.size} card{pick.size === 1 ? "" : "s"}
+                  <button className="btn btn-primary" disabled={!pick.size && !upd.size} onClick={() => void run()}>
+                    {[pick.size ? `Import ${pick.size}` : "", upd.size ? `update ${upd.size}` : ""].filter(Boolean).join(" · ").replace(/^u/, "U")} card{pick.size + upd.size === 1 ? "" : "s"}
                   </button>
                 </div>
               </>

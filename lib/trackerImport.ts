@@ -1,7 +1,7 @@
 // Server-only: one-way import from the ARF1 Team Cards Tracker (Google Sheet)
 // into Ktulu's card records. Reads with the signed-in user's own Google token
 // (read-only Drive scope). Never writes to the tracker.
-import { listCards, saveCardsPublic, type CardRecord, type LocValue } from "./teamCards";
+import { applyChanges, diff, listCards, saveCardsPublic, type Change, type CardRecord, type LocValue } from "./teamCards";
 
 export const TRACKER_ID = "1btT2Ih9bB4y8rBmWKqYIQUSzDTnqWAAqY8HKLVNU7KM";
 export const TRACKER_URL = `https://docs.google.com/spreadsheets/d/${TRACKER_ID}/edit`;
@@ -19,10 +19,12 @@ export type TrackerCard = {
   values: CardRecord["values"];
   brief: NonNullable<CardRecord["brief"]>;
 };
+export type TrackerUpdate = { label: string; locale: "en" | "de" | null; before: string; after: string };
 export type ImportPreview = {
-  cards: (TrackerCard & { match?: { cardId: string; reason: string } })[];
+  cards: (TrackerCard & { match?: { cardId: string; reason: string }; updates?: TrackerUpdate[] })[];
   newCount: number;
   dupCount: number;
+  updateCount: number;
 };
 
 async function sheet(token: string, name: string, headerRow: number): Promise<Row[]> {
@@ -150,29 +152,55 @@ function matchOf(t: TrackerCard, cards: CardRecord[]): { cardId: string; reason:
   return undefined;
 }
 
-export async function previewImport(token: string): Promise<ImportPreview> {
-  const [tracker, cards] = await Promise.all([readTracker(token), listCards()]);
-  const out = tracker.map((t) => ({ ...t, match: matchOf(t, cards) }));
-  return { cards: out, newCount: out.filter((c) => !c.match).length, dupCount: out.filter((c) => c.match).length };
+// Texts that changed in the tracker for a card already in Ktulu. Only filled
+// tracker cells count: an empty cell never blanks a text in Ktulu.
+function trackerChanges(t: TrackerCard, cardId: string): Change[] {
+  const out: Change[] = [];
+  for (const [key, v] of Object.entries(t.values)) {
+    if (v && typeof v === "object") {
+      for (const loc of ["en", "de"] as const) {
+        const val = ((v as LocValue)[loc] ?? "").trim();
+        if (val) out.push({ card: cardId, key, locale: loc, value: val });
+      }
+    } else if (typeof v === "string" && v.trim()) out.push({ card: cardId, key, value: v.trim() });
+  }
+  return out;
+}
+function updatesFor(t: TrackerCard, cardId: string, cards: CardRecord[]): { changes: Change[]; rows: TrackerUpdate[] } {
+  const changes = trackerChanges(t, cardId);
+  const { rows } = diff(cards, changes); // unknown fields or wrong values fall out here
+  const keep = rows.map((r) => ({ label: r.label, locale: r.locale, before: String(r.before ?? ""), after: String(r.after ?? "") }));
+  return { changes: changes.filter((c) => rows.some((r) => r.key === c.key && (r.locale ?? null) === (c.locale ?? null))), rows: keep };
 }
 
-// Adds the chosen new cards (never overwrites an existing one) and links
-// duplicates to their tracker row on the Ktulu side.
-export async function runImport(token: string, ids: string[], by: string) {
+export async function previewImport(token: string): Promise<ImportPreview> {
+  const [tracker, cards] = await Promise.all([readTracker(token), listCards()]);
+  const out = tracker.map((t) => {
+    const match = matchOf(t, cards);
+    return { ...t, match, ...(match ? { updates: updatesFor(t, match.cardId, cards).rows } : {}) };
+  });
+  return { cards: out, newCount: out.filter((c) => !c.match).length, dupCount: out.filter((c) => c.match).length, updateCount: out.filter((c) => c.updates?.length).length };
+}
+
+// Adds the chosen new cards, links duplicates to their tracker row, refreshes
+// their brief from it and, for the cards picked under "update", takes over the
+// texts that changed in the tracker (record and staging, logged like any edit).
+export async function runImport(token: string, ids: string[], by: string, update: string[] = []) {
   const [tracker, cards] = await Promise.all([readTracker(token), listCards()]);
   const added: string[] = [];
   const linked: string[] = [];
   const skipped: string[] = [];
+  const pending: Change[] = [];
   const now = new Date().toISOString();
   for (const t of tracker) {
     const m = matchOf(t, cards);
     if (m) {
       const c = cards.find((x) => x.id === m.cardId);
-      if (c && !c.brief?.trackerId) {
-        c.brief = { ...(c.brief ?? {}), trackerId: t.id } as CardRecord["brief"];
-        linked.push(`${t.id} → ${c.id}`);
-      }
-      if (ids.includes(t.id)) skipped.push(`${t.id} (${m.reason}: ${m.cardId})`);
+      if (c && !c.brief?.trackerId) linked.push(`${t.id} → ${c.id}`);
+      // the brief (status, dates, reward, legal …) always follows the tracker
+      if (c) c.brief = { ...(c.brief ?? {}), ...t.brief, trackerId: t.id } as CardRecord["brief"];
+      if (c && update.includes(t.id)) pending.push(...updatesFor(t, c.id, cards).changes);
+      else if (ids.includes(t.id)) skipped.push(`${t.id} (${m.reason}: ${m.cardId})`);
       continue;
     }
     if (!ids.includes(t.id)) continue;
@@ -192,5 +220,7 @@ export async function runImport(token: string, ids: string[], by: string) {
     added.push(t.id);
   }
   await saveCardsPublic(cards);
-  return { added, linked, skipped };
+  const res = pending.length ? await applyChanges(pending, `${by} (from the tracker)`) : { applied: [], pushed: [], errors: [] as string[] };
+  const updated = [...new Set(res.applied.map((r) => r.card))];
+  return { added, linked, skipped, updated, changed: res.applied.length, errors: res.errors };
 }
