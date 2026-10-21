@@ -53,14 +53,14 @@ export default function BuildPages({ campaign, campaignName, figmaUrl, hasPages,
     setWaiting(null);
   };
 
-  const label = hasPages ? "Update the pages from Figma" : "Build the pages from Figma";
+  const label = `${hasPages ? "Update" : "Build"} the ${campaignName ? `${campaignName} ` : ""}pages from Figma`;
   const box: React.CSSProperties = { border: "1px solid var(--border)", borderRadius: 12, padding: compact ? 12 : 16, display: "grid", gap: 10, background: hasPages ? "transparent" : "rgba(255,45,0,.05)" };
 
   return (
     <div style={box}>
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 260px", minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>{hasPages ? "Landing pages" : `No ${campaignName ?? ""} pages on staging yet`}</div>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>{hasPages ? `${campaignName ? `${campaignName} l` : "L"}anding pages` : `No ${campaignName ?? ""} pages on staging yet`}</div>
           <div style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>
             {hasPages
               ? "Built from the Figma design. Run it again after design changes; pages someone made by hand are never touched."

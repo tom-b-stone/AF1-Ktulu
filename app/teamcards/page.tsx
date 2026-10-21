@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import Replace from "./Replace";
 import { cardTemplate } from "@/lib/cardTemplate";
 import TrackerImport from "./TrackerImport";
+import BuildPages from "./BuildPages";
 import { SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
 
@@ -75,6 +76,18 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [fCampaign, setFCampaign] = useState(ALL);
+  // the Figma sync campaigns, so a campaign filter can offer "build the pages from Figma"
+  const [syncCampaigns, setSyncCampaigns] = useState<{ key: string; name: string; figmaFile?: string; figmaUrl?: string }[]>([]);
+  const [campPages, setCampPages] = useState<Record<string, number>>({});
+  useEffect(() => {
+    fetch("/api/sitemap/campaigns").then((r) => r.json()).then((j) => j.campaigns && setSyncCampaigns(j.campaigns)).catch(() => {});
+  }, []);
+  const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
+  const syncCamp = fCampaign ? syncCampaigns.find((c) => norm(c.name) === norm(fCampaign)) : undefined;
+  useEffect(() => {
+    if (!syncCamp || syncCamp.key in campPages) return;
+    fetch(`/api/sitemap/${syncCamp.key}`).then((r) => r.json()).then((j) => setCampPages((m) => ({ ...m, [syncCamp.key]: (j.pages ?? []).length }))).catch(() => {});
+  }, [syncCamp, campPages]);
   const [fGp, setFGp] = useState(ALL);
   const [fType, setFType] = useState(ALL);
   const [fQuick, setFQuick] = useState(ALL);
@@ -287,6 +300,10 @@ export default function Page() {
             );
           })}
         </section>
+      )}
+
+      {cards && syncCamp?.figmaFile && syncCamp.key in campPages && (
+        <BuildPages compact campaign={syncCamp.key} campaignName={syncCamp.name} figmaUrl={syncCamp.figmaUrl} hasPages={campPages[syncCamp.key] > 0} />
       )}
 
       {cards && (
