@@ -231,6 +231,14 @@ export async function stepJob(id: string, budgetMs = 40_000): Promise<Job> {
         job.log.push(`page exists on staging, will be updated: /${p.url}`);
         continue;
       }
+      // an earlier copy of the same page (staging has no parent there, so its URL differs): same title, slug or slug-2026
+      const last = (p.slug ?? p.url).split("/").pop() ?? "";
+      const twin = last ? ((await stg(`/pages?where[or][0][slug][equals]=${encodeURIComponent(last)}&where[or][1][slug][equals]=${encodeURIComponent(`${last}-2026`)}&limit=5&depth=0&draft=true`).catch(() => ({ docs: [] }))).docs ?? []).filter((d: Json) => d.title === p.title).sort((a: Json, b: Json) => Number(b._status === "published") - Number(a._status === "published"))[0] : undefined;
+      if (twin) {
+        p.stg = twin.id;
+        job.log.push(`earlier copy on staging, will be updated: /${twin.url} (for /${p.url})`);
+        continue;
+      }
       // staging strips "/" from slugs: "paulaner-pro/brewery" becomes slug
       // "brewery" under the page at the parent URL, so the URL stays the same
       const parentUrl = p.url.split("/").slice(0, -1).join("/");

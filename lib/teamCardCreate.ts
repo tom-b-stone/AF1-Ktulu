@@ -261,8 +261,12 @@ export async function fromProduction(id: string, by: string, jobId?: string) {
       return { ok: true, steps, badgeId: r.badgeId, prod: p, job: null };
     }
     const kw = (card.brief?.race || card.brief?.campaign || "").toLowerCase();
-    job = await startJob(`${card.id} page`, [page.id], `Team Cards`, { badges: { [p.id]: r.badgeId }, engagements: r.engagementId && r.prodEngagementId ? { [r.prodEngagementId]: r.engagementId } : {}, ...(kw ? { keyword: kw } : {}), ...(card.staging.pageId ? { stagingPage: card.staging.pageId } : {}) });
-    steps.push({ step: `page /${page.url} from production: copying to staging${card.staging.pageId ? " onto the card's staging page" : ""} (whole page, published on staging)`, ok: true });
+    // the card's staging page is overwritten only when it IS that page (same URL); a test or WiP page that
+    // happens to hold the module stays as it is, and the production page gets its own page on staging
+    const own = card.staging.pageId ? await stg(`/pages/${card.staging.pageId}?depth=0&draft=true`).catch(() => null) : null;
+    const samePage = own && (own.url === page.url || (own.slug && own.slug === page.url.split("/").pop()));
+    job = await startJob(`${card.id} page`, [page.id], `Team Cards`, { badges: { [p.id]: r.badgeId }, engagements: r.engagementId && r.prodEngagementId ? { [r.prodEngagementId]: r.engagementId } : {}, ...(kw ? { keyword: kw } : {}), ...(samePage ? { stagingPage: card.staging.pageId } : {}) });
+    steps.push({ step: `page /${page.url} from production: copying to staging${samePage ? " onto the card's staging page" : ""} (whole page, published on staging)`, ok: true });
   }
   // 3 the page copy, as far as the time allows
   // (stays well inside the 60 s function limit; what is left continues in the next call)
