@@ -297,8 +297,10 @@ async function runUploads(c) {
     if (!done[u.hash]) {
       progress("Uploading image " + (i + 1) + " / " + c.uploads.length + " to staging …");
       var raw = await figma.getImageByHash(u.hash).getBytesAsync();
-      var enc = await askUI("encode-image", { bytes: Array.from(raw) });
-      done[u.hash] = (await api("POST", { action: "upload", name: u.node.name.split(" · ")[0] + " " + u.field.layer, mime: "image/jpeg", data: enc.base64, alt: u.node.name })).id;
+      var enc = await askUI("encode-image", { bytes: Array.from(raw), webp: true, edge: 2560, quality: 0.8, preview: true });
+      var up = await api("POST", { action: "upload", name: u.node.name.split(" · ")[0] + " " + u.field.layer, mime: enc.mime || "image/webp", data: enc.base64, preview: enc.preview, previewMime: "image/jpeg", alt: u.node.name });
+      if (up.note) log("  " + u.node.name + ": " + up.note); else if (up.alt) log("  " + u.node.name + ": alt text by Claude · " + up.alt);
+      done[u.hash] = up.id;
     }
     c.values[u.field.key] = done[u.hash];
     var d = readData(u.node); d.imgs = d.imgs || {}; d.imgs[u.field.key] = { hash: u.hash, id: done[u.hash] }; writeData(u.node, d);
@@ -902,10 +904,13 @@ function designPages(page) {
 async function pageImage(hash, page, context, ctx) {
   if (ctx.map[hash]) return ctx.map[hash];
   var raw = await figma.getImageByHash(hash).getBytesAsync();
-  var enc = await askUI("encode-image", { bytes: Array.from(raw), webp: true });
+  var enc = await askUI("encode-image", { bytes: Array.from(raw), webp: true, edge: 2560, quality: 0.8, preview: true });
   ctx.nn[page] = (ctx.nn[page] || 0) + 1;
-  var r = await api("POST", { action: "upload", page: page, context: context, nn: ctx.nn[page], mime: enc.mime || "image/webp", data: enc.base64, alt: page + ", " + context + " image" });
+  progress("Image " + page + " · " + context + ": WebP + alt text by Claude …");
+  var r = await api("POST", { action: "upload", page: page, context: context, nn: ctx.nn[page], mime: enc.mime || "image/webp", data: enc.base64, preview: enc.preview, previewMime: "image/jpeg", alt: page + ", " + context + " image" });
+  if (r.note) log("  " + page + " · " + context + ": " + r.note); else if (r.alt) log("  " + page + " · " + context + ": " + r.name + " · " + r.alt);
   ctx.map[hash] = r.id;
+  ctx.fresh = ctx.fresh || {}; ctx.fresh[r.id] = 1;
   return r.id;
 }
 async function readModule(inst, type, bp, page, ctx) {
@@ -950,6 +955,16 @@ async function pagesFromDesign() {
     log("• " + p.name + ": " + mods.length + " modules");
   }
   figma.root.setSharedPluginData(NS, "pageimgs", JSON.stringify(ctx.map));
+  // images from earlier builds still carry a placeholder alt text: Claude writes real ones
+  var used = {};
+  out.forEach(function (pg) { pg.modules.forEach(function (md) { for (var l in md.images) if (!(ctx.fresh || {})[md.images[l]]) used[md.images[l]] = pg.name; }); });
+  var ids = Object.keys(used), fixed = 0;
+  for (var a = 0; a < ids.length; a++) {
+    progress("Checking alt texts " + (a + 1) + " / " + ids.length + " …");
+    try { var fx = await api("POST", { action: "alt-fix", id: ids[a], label: used[ids[a]] }); if (fx.alt) { fixed++; log("  alt text by Claude (" + used[ids[a]] + "): " + fx.alt); } }
+    catch (e) { log("⚠ alt text " + ids[a] + ": " + (e && e.message ? e.message : e)); }
+  }
+  if (ids.length) log("Alt texts: " + fixed + " written by Claude, " + (ids.length - fixed) + " already fine.");
   progress("Building the pages on staging …");
   var r = await api("POST", { action: "build-pages", pages: out });
   r.steps.forEach(function (s) { log((s.ok ? "" : "⚠ ") + s.step); });

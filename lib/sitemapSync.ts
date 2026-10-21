@@ -702,6 +702,15 @@ export async function mediaFile(id: string): Promise<{ body: ArrayBuffer; type: 
   return null;
 }
 
+// alt text of a staging media item, and setting it (the Figma alt-text pass)
+export async function mediaAlt(id: string): Promise<{ alt: string; filename: string; mimeType: string } | null> {
+  const doc = await stg(`/media/${id}?depth=0`).catch(() => null);
+  return doc ? { alt: doc.alt ?? "", filename: doc.filename ?? "", mimeType: doc.mimeType ?? "" } : null;
+}
+export async function setMediaAlt(id: string, alt: string) {
+  await stg(`/media/${id}`, { method: "PATCH", body: JSON.stringify({ alt }) });
+}
+
 // An image placed in Figma → staging media (campaign folder + tag).
 export async function uploadFromFigma(campaign: string, name: string, bytes: Uint8Array, mime: string, alt: string) {
   const c = await getCampaign(campaign);

@@ -207,7 +207,21 @@
   onmessage = async (e) => {
     const m = e.data.pluginMessage; if (!m) return;
     if (m.type === "fetch-image") { try { const r = await fetch(m.url); if (!r.ok) throw new Error("image " + r.status); reply(m.reqId, await toJpeg(await r.blob(), 2400, 0.9)); } catch (err) { reply(m.reqId, null, err.message); } return; }
-    if (m.type === "encode-image" && m.webp) { try { const bmp = await createImageBitmap(new Blob([new Uint8Array(m.bytes)])); const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d").drawImage(bmp, 0, 0); let out = await new Promise((r) => c.toBlob(r, "image/webp", 0.85)); let mime = "image/webp"; if (!out || out.type !== "image/webp") { out = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.88)); mime = "image/jpeg"; } const j = new Uint8Array(await out.arrayBuffer()); let b = ""; for (let i = 0; i < j.length; i += 0x8000) b += String.fromCharCode.apply(null, j.subarray(i, i + 0x8000)); reply(m.reqId, { base64: btoa(b), mime }); } catch (err) { reply(m.reqId, null, err.message); } return; }
+    // WebP like the Asset Uploader (longest edge 2560, quality 80; card art keeps its size), plus a small JPEG preview for Claude's alt text
+    if (m.type === "encode-image" && m.webp) {
+      try {
+        const b64 = async (blob) => { const j = new Uint8Array(await blob.arrayBuffer()); let b = ""; for (let i = 0; i < j.length; i += 0x8000) b += String.fromCharCode.apply(null, j.subarray(i, i + 0x8000)); return btoa(b); };
+        const bmp = await createImageBitmap(new Blob([new Uint8Array(m.bytes)]));
+        const draw = (edge) => { const k = edge ? Math.min(1, edge / Math.max(bmp.width, bmp.height)) : 1; const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); return c; };
+        const c = draw(m.edge || 0);
+        let out = await new Promise((r) => c.toBlob(r, "image/webp", m.quality || 0.85)); let mime = "image/webp";
+        if (!out || out.type !== "image/webp") { out = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.88)); mime = "image/jpeg"; }
+        const res = { base64: await b64(out), mime };
+        if (m.preview) { const p = draw(1568); let pv = await new Promise((r) => p.toBlob(r, "image/jpeg", 0.78)); if (pv && pv.size > 700000) pv = await new Promise((r) => p.toBlob(r, "image/jpeg", 0.6)); res.preview = await b64(pv); }
+        reply(m.reqId, res);
+      } catch (err) { reply(m.reqId, null, err.message); }
+      return;
+    }
     if (m.type === "encode-image") { try { const j = await toJpeg(new Blob([new Uint8Array(m.bytes)]), 2400, 0.85); let b = ""; for (let i = 0; i < j.length; i += 0x8000) b += String.fromCharCode.apply(null, j.subarray(i, i + 0x8000)); reply(m.reqId, { base64: btoa(b) }); } catch (err) { reply(m.reqId, null, err.message); } return; }
     if (m.type === "token") { $("token").value = m.token; done(1, !!m.token); if (!m.token) { $("noToken").hidden = false; tab("setup"); $("s1").open = true; } }
     if (m.type === "art-candidates") artCandidates(m);

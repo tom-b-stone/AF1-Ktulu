@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvePluginToken } from "@/lib/connectorTokens";
-import { MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, getPending, loadModel, mediaFile, previewSync, uploadFromFigma, getCampaign, listCampaigns } from "@/lib/sitemapSync";
+import { MODULES, OVERLAY_KEY, ackPending, applySync, clearCommand, getCommand, getPending, loadModel, mediaFile, previewSync, uploadFromFigma, getCampaign, listCampaigns, mediaAlt, setMediaAlt } from "@/lib/sitemapSync";
+import { describeFigmaImage, placeholderAlt } from "@/lib/figmaImageAlt";
 import { blueprints, buildPagesFromFigma, type FigmaPage } from "@/lib/pagesFromFigma";
 import { createOnStaging } from "@/lib/teamCardCreate";
 import { canonicalLoc } from "@/lib/assetNaming";
@@ -116,17 +117,48 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (b?.action === "ack") return json({ remaining: await ackPending(campaign, b.keys ?? []) });
     if (b?.action === "upload") {
       if (!b.data) return json({ error: "no image data" }, 400);
-      // page images from the design follow the Asset Uploader rule: audif1_{year}_{LOC}_GP_{context}_{descriptor}_{nn}
-      const pg = b as unknown as { page?: string; context?: string; nn?: number };
-      if (pg.page && pg.context) {
-        const c = await getCampaign(campaign);
-        const loc = canonicalLoc(plainLoc(c?.race || c?.name || campaign)) || plainLoc(c?.race || campaign);
-        const desc = pg.page.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-        b.name = `audif1_${c?.season || "2026"}_${loc}_GP_${pg.context}_${desc}_${String(pg.nn ?? 1).padStart(2, "0")}`;
+      // like the Asset Uploader: WebP from the plugin (longest edge 2560, quality 80), Claude writes the alt
+      // text and the descriptor, the name follows the rule audif1_{year}_{LOC}_GP_{context}_{descriptor}_{nn}
+      const pg = b as unknown as { page?: string; context?: string; nn?: number; preview?: string; previewMime?: string };
+      const c = await getCampaign(campaign);
+      const loc = canonicalLoc(plainLoc(c?.race || c?.name || campaign)) || plainLoc(c?.race || campaign);
+      const year = Number(c?.season) || 2026;
+      let described: Awaited<ReturnType<typeof describeFigmaImage>> = null;
+      let note = "";
+      if (pg.preview) {
+        try {
+          described = await describeFigmaImage({ preview: { mime: pg.previewMime || "image/jpeg", data: pg.preview }, race: c?.race || c?.name || campaign, loc, year, label: [pg.page, pg.context].filter(Boolean).join(" · ") || (b.name ?? "") });
+          if (!described) note = "no Claude key set (Admin → Claude API), placeholder alt text";
+        } catch (e) {
+          note = `alt text not generated (${e instanceof Error ? e.message : "failed"}), placeholder kept`;
+        }
       }
-      const id = await uploadFromFigma(campaign, b.name ?? "figma-image", Uint8Array.from(Buffer.from(b.data, "base64")), b.mime ?? "image/jpeg", b.alt ?? "");
-      console.log(`[sitemap] ${rec.email} uploaded image from Figma → ${id}`);
-      return json({ id });
+      if (pg.page && pg.context) {
+        const desc = described?.descriptor || pg.page.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        b.name = `audif1_${year}_${loc}_GP_${pg.context}_${desc}_${String(pg.nn ?? 1).padStart(2, "0")}`;
+      }
+      const alt = described?.alt || b.alt || "";
+      const id = await uploadFromFigma(campaign, b.name ?? "figma-image", Uint8Array.from(Buffer.from(b.data, "base64")), b.mime ?? "image/webp", alt);
+      console.log(`[sitemap] ${rec.email} uploaded image from Figma → ${id}${described ? " (alt by Claude)" : ""}`);
+      return json({ id, name: b.name, alt, ...(note ? { note } : {}) });
+    }
+    // images already on the pages with a placeholder alt text: Claude writes a real one (one image per call)
+    if (b?.action === "alt-fix") {
+      const id = String((b as unknown as { id?: string }).id ?? "");
+      const label = String((b as unknown as { label?: string }).label ?? "");
+      const m = id ? await mediaAlt(id) : null;
+      if (!m) return json({ id, skipped: "not found" });
+      if (!placeholderAlt(m.alt)) return json({ id, skipped: "has an alt text" });
+      if (m.mimeType && !/^image\//.test(m.mimeType)) return json({ id, skipped: "not an image" });
+      const file = await mediaFile(id);
+      if (!file) return json({ id, skipped: "image too large to read" });
+      const c = await getCampaign(campaign);
+      const loc = canonicalLoc(plainLoc(c?.race || c?.name || campaign)) || plainLoc(c?.race || campaign);
+      const d = await describeFigmaImage({ preview: { mime: file.type, data: Buffer.from(file.body).toString("base64") }, race: c?.race || c?.name || campaign, loc, year: Number(c?.season) || 2026, label: label || m.filename });
+      if (!d) return json({ id, skipped: "no Claude key set (Admin → Claude API)" });
+      await setMediaAlt(id, d.alt);
+      console.log(`[sitemap] ${rec.email} alt text by Claude for ${id}`);
+      return json({ id, alt: d.alt, before: m.alt });
     }
     if (b?.action === "sync") {
       const r = await applySync(campaign, rec.email, { figma: b.figma ?? {}, nodes: b.nodes, decisions: b.decisions, only: b.only });
