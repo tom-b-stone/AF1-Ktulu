@@ -7,7 +7,7 @@ import { blockedPath, type Role } from "./lib/toolAccess";
 // per-user token in its path (lib/connectorTokens.ts).
 // /p/<slug> is the public photobook share page (QR code on the printed book).
 // /.well-known + /api/oauth/token|register: the company connector's OAuth (Claude's servers call them).
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/mcp", "/.well-known", "/api/oauth/token", "/api/oauth/register", "/api/figma", "/api/capture", "/p", "/zine", "/af1-live", "/bg", "/slash-logo.png", "/videos"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/mcp", "/.well-known", "/api/oauth/token", "/api/oauth/register", "/api/figma", "/api/notch", "/api/capture", "/p", "/zine", "/af1-live", "/bg", "/slash-logo.png", "/videos"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
