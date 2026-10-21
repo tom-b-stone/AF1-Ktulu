@@ -466,9 +466,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     panel.setFrame(frame, display: true)
     panel.orderFrontRegardless()
     // clicks pass through everywhere except the visible shape (checked 20× a second)
-    Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+    let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated { self?.track() }
     }
+    RunLoop.main.add(t, forMode: .common)
 
     status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     status.button?.title = "AF1"
