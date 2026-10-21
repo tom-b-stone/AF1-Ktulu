@@ -83,7 +83,10 @@ export async function createOnStaging(id: string, by: string): Promise<{ ok: boo
     }
     if (deFallback.length) steps.push({ step: `German missing, English used for now: ${deFallback.join(", ")}`, ok: true });
     if (card.brief?.imageId) doc.badgeImage = card.brief.imageId;
-    else steps.push({ step: "no card image yet: the template image stays until one is set", ok: true });
+    else {
+      doc.badgeImage = idOf(doc.badgeImage); // the template's image, as an id (the template is read with depth 1)
+      steps.push({ step: "no card image yet: the template image stays until one is set", ok: true });
+    }
     const tagType = (t: Json, d: string) => (t && typeof t === "object" && t.type ? t.type : d);
     // a tag that can't be found or created is skipped (noted), never fatal
     const tag = async (title: string, type: string) => {
