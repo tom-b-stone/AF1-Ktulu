@@ -468,7 +468,7 @@ export default function EditCard() {
           })}
         </nav>
         {guide !== null && (
-          <div role="region" aria-label="Guided setup" style={{ margin: "0 24px 10px", padding: "10px 14px", borderRadius: 12, border: `1px solid rgba(255,45,0,.45)`, background: "rgba(255,45,0,.06)", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <div role="region" aria-label="Guided setup" style={{ margin: `0 ${drawer ? 484 : 24}px 10px 24px`, transition: "margin .28s cubic-bezier(.22,1,.36,1)", padding: "10px 14px", borderRadius: 12, border: `1px solid rgba(255,45,0,.45)`, background: "rgba(255,45,0,.06)", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "grid", gap: 2, flex: "1 1 360px", minWidth: 0 }}>
               <span style={{ fontSize: 11.5, color: C.mute }}>
                 Guided setup · step {guide + 2} of {GUIDE.length + 1}
