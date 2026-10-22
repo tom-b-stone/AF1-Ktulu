@@ -35,6 +35,7 @@ export type CardRecord = {
   // prefilled from another card. Shown in italics until someone keeps or edits them.
   suggested?: Record<string, { by: "claude" | "prefill"; from?: string; at: string }>;
   updatedAt: string;
+  syncedAt?: string; // last time record and staging were known to match (read from or written to staging)
   log: { at: string; by: string; summary: string }[];
 };
 
@@ -145,7 +146,8 @@ export async function loadFromStaging(rec: CardRecord): Promise<CardRecord> {
     if (f.localized) values[f.key] = { en: getPath(docs[`${f.doc}:en`], f.path) ?? "", de: getPath(docs[`${f.doc}:de`], f.path) ?? "" };
     else values[f.key] = getPath(docs[`${f.doc}:en`], f.path);
   }
-  return { ...rec, values, updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  return { ...rec, values, updatedAt: now, syncedAt: now };
 }
 
 export async function listCards(): Promise<CardRecord[]> {
@@ -287,7 +289,7 @@ export async function getCard(id: string): Promise<CardRecord | undefined> {
 export type Change = { card: string; key: string; locale?: Loc | null; value: string | boolean };
 export type DiffRow = { card: string; key: string; label: string; locale: Loc | null; before: unknown; after: unknown; issues: string[] };
 
-export function diff(cards: CardRecord[], changes: Change[]): { rows: DiffRow[]; errors: string[] } {
+export function diff(cards: CardRecord[], changes: Change[], force = false): { rows: DiffRow[]; errors: string[] } {
   const rows: DiffRow[] = [];
   const errors: string[] = [];
   for (const c of changes) {
@@ -301,7 +303,7 @@ export function diff(cards: CardRecord[], changes: Change[]): { rows: DiffRow[];
     if (f.options && !f.options.includes(String(c.value))) { errors.push(`${card.id} ${f.label}: one of ${f.options.join(", ")}`); continue; }
     const cur = card.values[f.key];
     const before = f.localized ? (cur as LocValue | undefined)?.[c.locale as Loc] ?? "" : cur;
-    if (before === c.value) continue;
+    if (before === c.value && !force) continue;
     const otherLoc = c.locale === "en" ? "de" : "en";
     const pendingOther = changes.find((x) => x.card === c.card && x.key === c.key && x.locale === otherLoc)?.value;
     const otherNow = f.localized ? String(pendingOther ?? (cur as LocValue | undefined)?.[otherLoc] ?? "") : undefined;
@@ -324,9 +326,9 @@ export async function readChangeset(id: string): Promise<Change[] | null> {
 // Writes the changes into the records and pushes them to staging, one
 // PATCH per document and locale. Staging is the test system, so the page
 // with the module is published there after the update.
-export async function applyChanges(changes: Change[], by: string, opts: { fromClaude?: boolean } = {}): Promise<{ applied: DiffRow[]; pushed: string[]; errors: string[] }> {
+export async function applyChanges(changes: Change[], by: string, opts: { fromClaude?: boolean; force?: boolean } = {}): Promise<{ applied: DiffRow[]; pushed: string[]; errors: string[] }> {
   const cards = await listCards();
-  const { rows, errors } = diff(cards, changes);
+  const { rows, errors } = diff(cards, changes, opts.force);
   const pushed: string[] = [];
   const byCard = new Map<string, DiffRow[]>();
   for (const r of rows) byCard.set(r.card, [...(byCard.get(r.card) ?? []), r]);
@@ -377,6 +379,7 @@ export async function applyChanges(changes: Change[], by: string, opts: { fromCl
       if (card.staging.badgeId && card.staging.engagementId && list.some((r) => r.key === "disabled" && r.after === false))
         await stg(`/engagements/${card.staging.engagementId}`, { method: "PATCH", body: JSON.stringify({ loggedOutBadge: card.staging.badgeId }) }).then(() => pushed.push(`${card.id} engagement linked back to the card`)).catch(() => {});
       card.updatedAt = new Date().toISOString();
+      if (card.staging.badgeId) card.syncedAt = card.updatedAt;
       card.log = [{ at: card.updatedAt, by, summary: `${list.length} change${list.length === 1 ? "" : "s"}: ${[...new Set(list.map((r) => r.label + (r.locale ? ` ${r.locale.toUpperCase()}` : "")))].join(", ")}` }, ...card.log].slice(0, 50);
     } catch (e) {
       errors.push(`${card.id}: ${e instanceof Error ? e.message : "push failed"} (record not changed)`);
@@ -624,7 +627,20 @@ export async function setCardArtHash(id: string, hash: string) {
   const cards = await listCards();
   const card = cards.find((c) => c.id === id);
   if (!card) return;
-  card.brief = { ...(card.brief ?? {}), figmaArtHash: hash };
+  const { figmaArtPending: _p, ...rest } = card.brief ?? {};
+  void _p;
+  card.brief = { ...rest, figmaArtHash: hash };
+  await saveCards(cards);
+}
+
+// a changed artwork the plugin sent: waits for approval in the sync bar (null: nothing waiting)
+export async function setArtPending(id: string, hash: string | null) {
+  const cards = await listCards();
+  const card = cards.find((c) => c.id === id);
+  if (!card) return;
+  const { figmaArtPending: _p, ...rest } = card.brief ?? {};
+  void _p;
+  card.brief = hash ? { ...rest, figmaArtPending: hash } : rest;
   await saveCards(cards);
 }
 
@@ -637,7 +653,7 @@ export async function cardsForArt() {
     hasImage: !!c.imageUrl,
     figmaFile: c.brief?.figmaFile ?? null,
     figmaNode: c.brief?.figmaNode ?? null,
-    hash: c.brief?.figmaArtHash ?? null,
+    hash: c.brief?.figmaArtPending ?? c.brief?.figmaArtHash ?? null, // an image waiting for approval counts as sent
   }));
 }
 

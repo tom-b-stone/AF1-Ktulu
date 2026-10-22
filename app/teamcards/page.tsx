@@ -11,6 +11,7 @@ import Replace from "./Replace";
 import { cardTemplate } from "@/lib/cardTemplate";
 import TrackerImport from "./TrackerImport";
 import BuildPages from "./BuildPages";
+import SyncBar, { cardSyncState, type SyncStatus } from "./SyncBar";
 import { fromProd } from "./fromProd";
 import { SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
@@ -74,6 +75,8 @@ function FilterSelect({ label, value, options, names, onChange }: { label: strin
 
 export default function Page() {
   const [cards, setCards] = useState<Row[] | null>(null);
+  const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [syncFor, setSyncFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [fCampaign, setFCampaign] = useState(ALL);
@@ -172,7 +175,18 @@ export default function Page() {
       sortable: true,
       cell: (c) => (
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            {(() => {
+              const st = cardSyncState(sync, c.id);
+              if (!st || !c.links.badge) return null;
+              const tone = st === "ok" ? "#7fd6a2" : st === "conflict" ? "#ff7a66" : "#f0b35a";
+              const label = st === "ok" ? "Staging, Ktulu and Figma match" : st === "conflict" ? "Changed on both sides: review" : "Change waiting: review and sync";
+              return (
+                <button title={label} aria-label={label} onPointerDown={stop} onClick={(e) => { e.stopPropagation(); if (st !== "ok") setSyncFor(c.id); }} style={{ all: "unset", cursor: st === "ok" ? "default" : "pointer", width: 8, height: 8, borderRadius: 99, background: tone, flexShrink: 0 }} />
+              );
+            })()}
+            <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+          </div>
           <div style={{ color: "var(--muted)", fontSize: 12 }}>
             {MECH[c.mechanic ?? ""] ?? c.mechanic ?? "No mechanic yet"} · {REWARD[c.rewardType ?? ""] ?? c.rewardType ?? "no reward set"}
           </div>
@@ -275,6 +289,8 @@ export default function Page() {
         </div>
         <p style={{ color: "var(--muted)", margin: 0, fontSize: 14, lineHeight: 1.5 }}>Every card with its texts, journey and staging links. Open a card to edit it step by step in the real frontend views.</p>
       </header>
+
+      <SyncBar onStatus={setSync} onSynced={() => void load()} openFor={syncFor} onCloseFor={() => setSyncFor(null)} />
 
       {error && <div role="alert" style={{ color: "#e06c5b" }}>{error}</div>}
       {!cards && !error && (

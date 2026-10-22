@@ -8,7 +8,8 @@ import { canonicalLoc } from "@/lib/assetNaming";
 // "São Paulo" → "BRA" via the race list, else the first three letters
 const LOCS: Record<string, string> = { "sao paulo": "BRA", singapore: "SIN", "las vegas": "LVG", qatar: "QAT", "abu dhabi": "UAE", mexico: "MEX", austin: "USA" };
 const plainLoc = (t: string) => { const k = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(); return LOCS[k] ?? k.replace(/[^a-z]/g, "").slice(0, 3).toUpperCase(); };
-import { cardsForArt, linkCardArt, setCardArtHash, setCardImage } from "@/lib/teamCards";
+import { cardsForArt, linkCardArt, setArtPending, setCardArtHash, setCardImage } from "@/lib/teamCards";
+import { holdArt } from "@/lib/teamCardSync";
 
 // Endpoint for the "AF1 Ktulu Sync" Figma plugin (figma-plugin/ in this
 // repo). The plugin runs in Figma's sandbox (origin "null"), so it can't
@@ -90,6 +91,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         const bytes = Buffer.from(x.data, "base64");
         if (bytes.byteLength > 4_000_000) return json({ error: "image over 4 MB" }, 400);
         const mime = (x as { mime?: string }).mime || "image/jpeg";
+        // a card without an image takes it right away; a changed artwork waits for approval in the Team Cards sync bar
+        const cur = (await cardsForArt()).find((c) => c.id === x.card);
+        if (cur?.hasImage) {
+          await holdArt(x.card, { data: x.data, mime, hash: x.hash ?? "", art: (x as { art?: string }).art ?? "", by: rec.email });
+          await setArtPending(x.card, x.hash ?? "pending");
+          console.log(`[figma] ${rec.email} card image ${x.card} from Figma: waiting for approval`);
+          return json({ held: true });
+        }
         const r = await setCardImage(x.card, new Blob([bytes], { type: mime }), x.name || `${x.card}.jpg`, rec.email, "the Figma Team Cards board (plugin)", (x as { art?: string }).art);
         if (x.hash) await setCardArtHash(x.card, x.hash);
         console.log(`[figma] ${rec.email} card image ${x.card} from Figma`);

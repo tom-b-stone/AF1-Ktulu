@@ -13,7 +13,8 @@ type S = { diffs: { state: string }[]; pending: number; figma: { reportedAt: str
 
 export default function FigmaSyncBanner() {
   const path = usePathname() ?? "";
-  const onCard = /^\/teamcards\/(?!figma|lexicon)[^/]+/.test(path);
+  // not on a card's page, and not on the overview (its sync bar shows Figma already)
+  const onCard = /^\/teamcards\/(?!figma|lexicon)[^/]+/.test(path) || path === "/teamcards";
   const [s, setS] = useState<S | null>(null);
   // "Later" holds for four hours in this browser, so the note doesn't follow you from page to page
   const [hidden, setHidden] = useState(() => {
