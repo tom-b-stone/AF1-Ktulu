@@ -24,7 +24,8 @@ export function cardSyncState(s: SyncStatus | null, id: string): "ok" | "change"
   return mine.some((r) => "dir" in r && r.dir === "conflict") ? "conflict" : "change";
 }
 
-export default function SyncBar({ onStatus, onSynced, openFor, onCloseFor }: { onStatus?: (s: SyncStatus | null) => void; onSynced?: () => void; openFor?: string | null; onCloseFor?: () => void }) {
+// headless: no bar of its own (the "Where we are" panel shows the result); it still checks and opens the review sheet
+export default function SyncBar({ onStatus, onSynced, openFor, onCloseFor, headless, request, recheck, onChecking }: { onStatus?: (s: SyncStatus | null) => void; onSynced?: () => void; openFor?: string | null; onCloseFor?: () => void; headless?: boolean; request?: { only?: "staging" | "figma"; n: number } | null; recheck?: number; onChecking?: (b: boolean) => void }) {
   const [s, setS] = useState<SyncStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -41,7 +42,11 @@ export default function SyncBar({ onStatus, onSynced, openFor, onCloseFor }: { o
     if (j.error) return setErr(j.error);
     setS(j);
   }, []);
-  useEffect(() => void check(), [check]);
+  useEffect(() => void check(), [check, recheck]);
+  useEffect(() => onChecking?.(busy), [busy, onChecking]);
+  useEffect(() => {
+    if (request) setSheet({ only: request.only });
+  }, [request]);
   useEffect(() => onStatus?.(s), [s, onStatus]);
   useEffect(() => {
     if (openFor) setSheet({ card: openFor });
@@ -87,6 +92,7 @@ export default function SyncBar({ onStatus, onSynced, openFor, onCloseFor }: { o
       </button>
     );
 
+  if (headless) return sheet && s ? <Review s={s} only={sheet.only} card={sheet.card} onClose={() => { setSheet(null); onCloseFor?.(); }} onDone={(fresh) => { if (fresh) setS(fresh); onSynced?.(); }} /> : null;
   if (allGood && !sheet)
     return (
       <div role="status" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--muted)" }}>

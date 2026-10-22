@@ -12,6 +12,7 @@ import { cardTemplate } from "@/lib/cardTemplate";
 import TrackerImport from "./TrackerImport";
 import BuildPages from "./BuildPages";
 import SyncBar, { cardSyncState, type SyncStatus } from "./SyncBar";
+import StatusPanel from "./StatusPanel";
 import { fromProd } from "./fromProd";
 import { SideSection, useSidebarContent } from "@/app/components/SidebarSlot";
 import { Table, type TableColumn } from "@/components/ui/table-editable";
@@ -77,6 +78,11 @@ export default function Page() {
   const [cards, setCards] = useState<Row[] | null>(null);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [syncFor, setSyncFor] = useState<string | null>(null);
+  const [syncReq, setSyncReq] = useState<{ only?: "staging" | "figma"; n: number } | null>(null);
+  const [recheck, setRecheck] = useState(0);
+  const [checking, setChecking] = useState(false);
+  // "Show them" from the panel: the table shows just those cards
+  const [focus, setFocus] = useState<{ label: string; ids: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [fCampaign, setFCampaign] = useState(ALL);
@@ -128,6 +134,7 @@ export default function Page() {
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (cards ?? []).filter((c) => {
+      if (focus && !focus.ids.includes(c.id)) return false;
       if (fCampaign && campaignOf(c) !== fCampaign) return false;
       if (fGp && gpOf(c) !== fGp) return false;
       if (fType && typeOf(c) !== fType) return false;
@@ -136,7 +143,7 @@ export default function Page() {
       const hay = [c.name, c.id, campaignOf(c), typeOf(c), c.meta.partner, c.meta.race, MECH[c.mechanic ?? ""], REWARD[c.rewardType ?? ""], ...c.check.missing].join(" ").toLowerCase();
       return hay.includes(needle);
     }).sort((a, b) => Math.floor(addedAt(b) / 864e5) - Math.floor(addedAt(a) / 864e5) || numOf(b.id) - numOf(a.id)); // newest cards first: latest import day, then highest number
-  }, [cards, q, fCampaign, fGp, fType, fQuick]);
+  }, [cards, q, fCampaign, fGp, fType, fQuick, focus]);
 
   const summary = useMemo(() => {
     const list = cards ?? [];
@@ -145,8 +152,9 @@ export default function Page() {
     return { total: list.length, campaigns: Object.entries(campaigns).sort((a, b) => (a[0] === "No campaign" ? 1 : b[0] === "No campaign" ? -1 : b[1] - a[1])) };
   }, [cards]);
 
-  const filtered = !!(q || fCampaign || fGp || fType || fQuick);
+  const filtered = !!(q || fCampaign || fGp || fType || fQuick || focus);
   const reset = () => {
+    setFocus(null);
     setQ("");
     setFCampaign(ALL);
     setFGp(ALL);
@@ -290,7 +298,23 @@ export default function Page() {
         <p style={{ color: "var(--muted)", margin: 0, fontSize: 14, lineHeight: 1.5 }}>Every card with its texts, journey and staging links. Open a card to edit it step by step in the real frontend views.</p>
       </header>
 
-      <SyncBar onStatus={setSync} onSynced={() => void load()} openFor={syncFor} onCloseFor={() => setSyncFor(null)} />
+      <SyncBar headless onStatus={setSync} onSynced={() => void load()} openFor={syncFor} onCloseFor={() => setSyncFor(null)} request={syncReq} recheck={recheck} onChecking={setChecking} />
+      {cards && (
+        <StatusPanel
+          cards={cards}
+          sync={sync}
+          checking={checking}
+          onShow={(label, ids) => {
+            setFocus({ label, ids });
+            document.getElementById("all-cards")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          onReview={(only) => setSyncReq({ only, n: Date.now() })}
+          onDone={() => {
+            void load();
+            setRecheck((n) => n + 1);
+          }}
+        />
+      )}
 
       {error && <div role="alert" style={{ color: "#e06c5b" }}>{error}</div>}
       {!cards && !error && (
@@ -327,7 +351,17 @@ export default function Page() {
       )}
 
       {cards && (
-        <section aria-label="All cards" style={{ display: "grid", gap: 10 }}>
+        <section id="all-cards" aria-label="All cards" style={{ display: "grid", gap: 10, scrollMarginTop: 80 }}>
+          {focus && (
+            <div role="status" style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--accent)", fontSize: 13 }}>
+              <span style={{ flex: 1 }}>
+                Showing {focus.ids.length} card{focus.ids.length === 1 ? "" : "s"}: {focus.label}
+              </span>
+              <button className="btn" style={{ height: 28 }} onClick={() => setFocus(null)}>
+                Show all
+              </button>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search cards: name, ID, partner, text…" style={{ width: "min(300px, 100%)" }} aria-label="Search cards" />
             <FilterSelect label="Status" value={fQuick} options={opts.quick} names={{ Missing: "Needs attention" }} onChange={setFQuick} />

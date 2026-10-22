@@ -491,21 +491,6 @@ export default function EditCard() {
                 <span key={i} style={{ width: 14, height: 4, borderRadius: 2, background: i <= guide ? C.lava : C.line2 }} />
               ))}
             </div>
-            <button style={btn()} disabled={guide === 0} onClick={() => setGuide(guide - 1)}>
-              Back
-            </button>
-            {guide < GUIDE.length - 1 ? (
-              <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => setGuide(guide + 1)}>
-                Next: {GUIDE[guide + 1].title} <Icon d={I.right} size={14} />
-              </button>
-            ) : (
-              <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => setGuide(null)}>
-                Finish the guide
-              </button>
-            )}
-            <button onClick={() => setGuide(null)} style={{ all: "unset", cursor: "pointer", fontSize: 12, color: C.mute, textDecoration: "underline" }}>
-              Leave the guide
-            </button>
           </div>
         )}
       </div>
@@ -983,6 +968,31 @@ export default function EditCard() {
             setAsk(nx ? { ...ask, stage: nx } : null);
           }}
         />
+      )}
+
+      {/* guided setup: its actions always sit at the bottom of the page (Back and Leave left, Next right) */}
+      {guide !== null && (
+        <footer role="region" aria-label="Guided setup actions" style={{ position: "sticky", bottom: 0, zIndex: 30, margin: `0 ${drawer ? 484 : 24}px 0 24px`, transition: "margin .28s cubic-bezier(.22,1,.36,1)", padding: "12px 0", borderTop: `1px solid ${C.line}`, background: C.bg, display: "flex", gap: 10, alignItems: "center" }}>
+          <button style={btn()} disabled={guide === 0} onClick={() => setGuide(guide - 1)}>
+            Back
+          </button>
+          <button onClick={() => setGuide(null)} style={{ all: "unset", cursor: "pointer", fontSize: 12.5, color: C.mute, padding: "0 6px" }}>
+            Leave the guide
+          </button>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 12.5, color: C.mute }}>
+            Step {guide + 2} of {GUIDE.length + 1}
+          </span>
+          {guide < GUIDE.length - 1 ? (
+            <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => setGuide(guide + 1)}>
+              Next: {GUIDE[guide + 1].title} <Icon d={I.right} size={14} />
+            </button>
+          ) : (
+            <button style={{ ...btn(true), fontWeight: 600 }} onClick={() => setGuide(null)}>
+              Finish the guide
+            </button>
+          )}
+        </footer>
       )}
     </div>
   );

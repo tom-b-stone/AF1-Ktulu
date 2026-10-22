@@ -1,6 +1,8 @@
 "use client";
 
-// New Team Card as a short dialog: one question at a time, answered with a tap.
+// New Team Card as a short dialog: one question at a time. Pick an answer, then
+// Continue in the action bar that always sits at the bottom of the page
+// (Back and Cancel on the left, Skip and Continue on the right).
 // The card exists in Ktulu right after the first answer (name → next free TC
 // number); every later answer is saved straight away and can be skipped for
 // now. At the end: prefill the texts from a similar card, then write them in
@@ -63,10 +65,25 @@ export default function NewCard() {
       .catch(() => setPages([]));
   }, [step, camp?.root]);
 
+  // the answer picked on the current step, applied with Continue
+  const [sel, setSel] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
   const next = (q: string, a: string) => {
     setAnswers((x) => [...x, { q, a }]);
     setErr("");
+    setSel("");
+    setFile(null);
     setStep(STEPS[STEPS.indexOf(step) + 1]);
+  };
+  // back one question (the name step can't be undone: the card exists then)
+  const back = () => {
+    const i = STEPS.indexOf(step);
+    if (i <= 1) return;
+    setAnswers((x) => x.slice(0, -1));
+    setErr("");
+    setSel("");
+    setFile(null);
+    setStep(STEPS[i - 1]);
   };
   const save = async (body: { setup?: unknown; brief?: Record<string, string> }) => {
     if (!card) return false;
@@ -110,238 +127,298 @@ export default function NewCard() {
   };
 
   const progress = STEPS.indexOf(step);
-  const chip = (on = false): React.CSSProperties => ({ padding: "10px 16px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: `1px solid ${on ? "var(--accent)" : "var(--border-2)"}`, background: on ? "rgba(255,45,0,.14)" : "var(--bg-2)", color: "var(--fg)", textAlign: "left" });
-  const skip = (q: string) => (
-    <button onClick={() => next(q, "Skipped for now")} style={{ all: "unset", cursor: "pointer", fontSize: 13, color: "var(--muted)", textDecoration: "underline" }}>
-      Skip for now
-    </button>
-  );
+  const chip = (on = false): React.CSSProperties => ({ padding: "10px 16px", borderRadius: 12, fontSize: 14, cursor: "pointer", border: `1px solid ${on ? "var(--accent)" : "var(--border-2)"}`, background: on ? "rgba(255,45,0,.14)" : "var(--bg-2)", color: "var(--fg)", textAlign: "left", boxShadow: on ? "0 0 0 1px var(--accent) inset" : undefined });
+  const pick = (v: string) => setSel((x) => (x === v ? "" : v));
 
-  const question = useMemo((): { q: string; sub?: string; body: React.ReactNode } | null => {
+  // every question: what it shows, and what Continue does
+  type Q = { q: string; sub?: string; body: React.ReactNode; ready: boolean; go?: () => Promise<void> | void; goLabel?: string; skip?: boolean };
+  const question = useMemo((): Q | null => {
     switch (step) {
       case "name":
         return {
           q: "What should the card be called?",
           sub: "It gets the next free number and is created in Ktulu right away. Nothing goes to staging yet.",
+          ready: !!name.trim(),
+          go: create,
+          goLabel: busy ? "Creating …" : "Create the card",
           body: (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (name.trim()) void create();
-              }}
-              style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-            >
-              <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Gabi's Las Vegas Helmet" style={{ flex: "1 1 280px", fontSize: 15 }} />
-              <button className="btn btn-primary" disabled={!name.trim() || busy}>
-                {busy ? "Creating …" : "Create the card"}
-              </button>
-              <label style={{ flexBasis: "100%", display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "var(--muted)" }}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <input
+                className="input"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && name.trim() && !busy && void create()}
+                placeholder="e.g. Gabi's Las Vegas Helmet"
+                style={{ fontSize: 15 }}
+              />
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "var(--muted)" }}>
                 <input type="checkbox" checked={test} onChange={(e) => setTest(e.target.checked)} />
                 Test card: gets TC-000, delete it on its overview when you are done
               </label>
-            </form>
+            </div>
           ),
         };
       case "type":
         return {
           q: "What kind of card is it?",
+          ready: !!sel,
+          skip: true,
+          go: async () => {
+            if (await save({ brief: { badgeType: sel } })) next("What kind of card is it?", sel);
+          },
           body: (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div role="radiogroup" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {(types.length ? types : ["Exclusive", "Limited", "Race"]).map((t) => (
-                <button key={t} style={chip()} disabled={busy} onClick={async () => (await save({ brief: { badgeType: t } })) && next("What kind of card is it?", t)}>
+                <button key={t} role="radio" aria-checked={sel === t} style={chip(sel === t)} onClick={() => pick(t)}>
                   {t}
                 </button>
               ))}
-              {skip("What kind of card is it?")}
             </div>
           ),
         };
-      case "campaign":
+      case "campaign": {
+        const c = camps.find((x) => x.key === sel);
         return {
           q: "Which campaign does it belong to?",
           sub: "The Grand Prix comes with the campaign.",
+          ready: !!sel,
+          skip: true,
+          go: async () => {
+            if (sel === "none") return next("Which campaign does it belong to?", "No campaign");
+            if (c && (await save({ brief: { campaign: c.name, race: c.race } }))) {
+              setCamp(c);
+              next("Which campaign does it belong to?", `${c.name}${c.race && c.race !== c.name ? ` · ${c.race} GP` : ""}`);
+            }
+          },
           body: (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              {camps.map((c) => (
-                <button
-                  key={c.key}
-                  style={chip()}
-                  disabled={busy}
-                  onClick={async () => {
-                    if (await save({ brief: { campaign: c.name, race: c.race } })) {
-                      setCamp(c);
-                      next("Which campaign does it belong to?", `${c.name}${c.race && c.race !== c.name ? ` · ${c.race} GP` : ""}`);
-                    }
-                  }}
-                >
-                  {c.name}
+            <div role="radiogroup" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {camps.map((x) => (
+                <button key={x.key} role="radio" aria-checked={sel === x.key} style={chip(sel === x.key)} onClick={() => pick(x.key)}>
+                  {x.name}
                 </button>
               ))}
-              <button style={chip()} onClick={() => next("Which campaign does it belong to?", "No campaign")}>
+              <button role="radio" aria-checked={sel === "none"} style={chip(sel === "none")} onClick={() => pick("none")}>
                 No campaign
               </button>
-              {skip("Which campaign does it belong to?")}
             </div>
           ),
         };
+      }
       case "image":
         return {
           q: "Is there a card image in Figma?",
           sub: "In Figma, the plugin keeps the image in sync with the design. Or upload one now.",
+          ready: sel === "figma" || sel === "later" || (sel === "upload" && !!file),
+          goLabel: sel === "upload" ? (busy ? "Uploading …" : "Upload and continue") : undefined,
+          go: async () => {
+            if (sel === "upload" && file) return upload(file);
+            if (sel === "figma" && (await save({ brief: { imageSource: "figma" } }))) {
+              setFigmaImage(true);
+              next("Is there a card image in Figma?", "Yes, in Figma");
+            }
+            if (sel === "later") next("Is there a card image in Figma?", "Not yet");
+          },
           body: (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <button
-                style={chip()}
-                disabled={busy}
-                onClick={async () => {
-                  if (await save({ brief: { imageSource: "figma" } })) {
-                    setFigmaImage(true);
-                    next("Is there a card image in Figma?", "Yes, in Figma");
-                  }
-                }}
-              >
-                Yes, it&apos;s in Figma
-              </button>
-              <label style={{ ...chip(), display: "inline-block" }}>
-                {busy ? "Uploading …" : "Upload it now"}
-                <input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
-              </label>
-              <button style={chip()} onClick={() => next("Is there a card image in Figma?", "Not yet")}>
-                Not yet
-              </button>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div role="radiogroup" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button role="radio" aria-checked={sel === "figma"} style={chip(sel === "figma")} onClick={() => pick("figma")}>
+                  Yes, it&apos;s in Figma
+                </button>
+                <label role="radio" aria-checked={sel === "upload"} style={{ ...chip(sel === "upload"), display: "inline-block" }}>
+                  {file ? `Upload: ${file.name}` : "Upload it now"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setFile(f);
+                        setSel("upload");
+                      }
+                    }}
+                  />
+                </label>
+                <button role="radio" aria-checked={sel === "later"} style={chip(sel === "later")} onClick={() => pick("later")}>
+                  Not yet
+                </button>
+              </div>
             </div>
           ),
         };
-      case "engagement":
+      case "engagement": {
+        const e = ENG.find((x) => x.key === sel);
         return {
           q: "How do fans earn the card?",
           sub: "The engagement. Items and pictures for the task are added in the editor.",
+          ready: !!e,
+          skip: true,
+          go: async () => {
+            if (e && (await save({ setup: { engagement: { type: e.key, items: [] } } }))) next("How do fans earn the card?", e.label);
+          },
           body: (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
-              {ENG.map((e) => (
-                <button key={e.key} style={{ ...chip(), display: "grid", gap: 2 }} disabled={busy} onClick={async () => (await save({ setup: { engagement: { type: e.key, items: [] } } })) && next("How do fans earn the card?", e.label)}>
-                  <b style={{ fontWeight: 600 }}>{e.label}</b>
-                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{e.hint}</span>
+            <div role="radiogroup" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+              {ENG.map((x) => (
+                <button key={x.key} role="radio" aria-checked={sel === x.key} style={{ ...chip(sel === x.key), display: "grid", gap: 2 }} onClick={() => pick(x.key)}>
+                  <b style={{ fontWeight: 600 }}>{x.label}</b>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{x.hint}</span>
                 </button>
               ))}
-              <span style={{ alignSelf: "center" }}>{skip("How do fans earn the card?")}</span>
             </div>
           ),
         };
-      case "reward":
+      }
+      case "reward": {
+        const r = REWARD.find((x) => x.key === sel);
         return {
           q: "What do fans get?",
+          ready: !!r,
+          skip: true,
+          go: async () => {
+            if (r && (await save({ setup: { reward: { type: r.key } } }))) next("What do fans get?", r.label);
+          },
           body: (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              {REWARD.map((r) => (
-                <button key={r.key} style={chip()} disabled={busy} onClick={async () => (await save({ setup: { reward: { type: r.key } } })) && next("What do fans get?", r.label)}>
-                  {r.label}
+            <div role="radiogroup" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {REWARD.map((x) => (
+                <button key={x.key} role="radio" aria-checked={sel === x.key} style={chip(sel === x.key)} onClick={() => pick(x.key)}>
+                  {x.label}
                 </button>
               ))}
-              {skip("What do fans get?")}
             </div>
           ),
         };
-      case "module":
+      }
+      case "module": {
+        const pg = (pages ?? []).find((x) => x.id === sel);
         return {
           q: "Which page does the card sit on?",
           sub: camp ? `The module with the task goes on one of the ${camp.name} pages.` : "The module with the task goes on this page.",
+          ready: !!pg,
+          skip: true,
+          go: async () => {
+            if (pg && (await save({ setup: { module: { pageId: pg.id, pageUrl: pg.url, pageTitle: pg.title } } }))) next("Which page does the card sit on?", pg.title || `/${pg.url}`);
+          },
           body: (
             <div style={{ display: "grid", gap: 8 }}>
               {pages === null && <span style={{ fontSize: 13, color: "var(--muted)" }}>Loading the pages …</span>}
               {pages?.length === 0 && (
                 <span style={{ fontSize: 13, color: "var(--muted)" }}>
-                  No pages on staging yet{camp?.figmaFile ? ". They can be built from the Figma design on Figma Sync." : "."}
+                  No pages on staging yet{camp?.figmaFile ? ". They can be built from the Figma design on Figma Sync." : "."} Skip for now: the card then goes on the campaign&apos;s WiP page.
                 </span>
               )}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {(pages ?? []).slice(0, 12).map((p) => (
-                  <button key={p.id} style={chip()} disabled={busy} onClick={async () => (await save({ setup: { module: { pageId: p.id, pageUrl: p.url, pageTitle: p.title } } })) && next("Which page does the card sit on?", p.title || `/${p.url}`)}>
-                    {p.title || p.url}
+              <div role="radiogroup" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(pages ?? []).slice(0, 12).map((x) => (
+                  <button key={x.id} role="radio" aria-checked={sel === x.id} style={chip(sel === x.id)} onClick={() => pick(x.id)}>
+                    {x.title || x.url}
                   </button>
                 ))}
               </div>
-              <span>{skip("Which page does the card sit on?")}</span>
             </div>
           ),
         };
+      }
       case "texts":
         return {
           q: "Prefill the texts from a similar card?",
-          sub: "Its texts go into the empty fields and its name becomes this card's name. You check and change them in the editor.",
-          body: card ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              <PrefillPicker cardId={card.id} onDone={(r) => next("Prefill the texts from a similar card?", `${r.filled.length} texts from ${r.from}`)} />
-              <span>
-                <button onClick={() => next("Prefill the texts from a similar card?", "I'll write them myself")} style={{ all: "unset", cursor: "pointer", fontSize: 13, color: "var(--muted)", textDecoration: "underline" }}>
-                  No, I&apos;ll write them myself
-                </button>
-              </span>
-            </div>
-          ) : null,
+          sub: "Pick a card: its texts go into the empty fields. You check and change them in the editor.",
+          ready: true,
+          goLabel: "Continue without prefill",
+          go: () => next("Prefill the texts from a similar card?", "I'll write them myself"),
+          body: card ? <PrefillPicker cardId={card.id} onDone={(r) => next("Prefill the texts from a similar card?", `${r.filled.length} texts from ${r.from}`)} /> : null,
         };
       default:
         return null;
     }
-  }, [step, name, busy, types, camps, camp, pages, card, test]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, name, busy, types, camps, camp, pages, card, test, sel, file]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const actionBar: React.CSSProperties = { position: "sticky", bottom: 0, zIndex: 20, display: "flex", gap: 10, alignItems: "center", padding: "14px 0", marginTop: 8, borderTop: "1px solid var(--border)", background: "var(--bg)" };
 
   return (
-    <div style={{ display: "grid", gap: 18, maxWidth: 720 }}>
+    <div style={{ display: "grid", gridTemplateRows: "auto 1fr auto", gap: 18, maxWidth: 720, minHeight: "calc(100dvh - 140px)" }}>
       <header style={{ display: "grid", gap: 8 }}>
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>New Team Card{card ? ` · ${card.id}` : ""}</span>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          New Team Card{card ? ` · ${card.id}` : ""} · step {Math.min(progress + 1, STEPS.length - 1)} of {STEPS.length - 1}
+        </span>
         <div aria-hidden style={{ display: "flex", gap: 4 }}>
-          {STEPS.map((s, i) => (
+          {STEPS.slice(0, -1).map((s, i) => (
             <span key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= progress ? "var(--accent)" : "var(--border)", transition: "background .2s" }} />
           ))}
         </div>
       </header>
 
-      {/* what was answered so far */}
-      {answers.length > 0 && (
-        <div style={{ display: "grid", gap: 6 }}>
-          {answers.map((x, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, fontSize: 13, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-              <span style={{ color: "var(--muted)" }}>{x.q}</span>
-              <span style={{ color: x.a === "Skipped for now" ? "var(--muted)" : "var(--fg)", fontWeight: 500 }}>{x.a}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ display: "grid", gap: 18, alignContent: "start" }}>
+        {/* what was answered so far */}
+        {answers.length > 0 && (
+          <div style={{ display: "grid", gap: 6 }}>
+            {answers.map((x, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 12, fontSize: 13, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                <span style={{ color: "var(--muted)" }}>{x.q}</span>
+                <span style={{ color: x.a === "Skipped for now" ? "var(--muted)" : "var(--fg)", fontWeight: 500 }}>{x.a}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
-      {question && (
-        <section aria-live="polite" style={{ display: "grid", gap: 12, padding: 20, borderRadius: 16, border: "1px solid var(--border-2)", background: "var(--bg-2)" }}>
-          <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.25 }}>{question.q}</h1>
-          {question.sub && <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5 }}>{question.sub}</p>}
-          {question.body}
-          {err && <div role="alert" style={{ color: "#e06c5b", fontSize: 13 }}>{err}</div>}
-        </section>
-      )}
+        {question && (
+          <section aria-live="polite" style={{ display: "grid", gap: 12, padding: 20, borderRadius: 16, border: "1px solid var(--border-2)", background: "var(--bg-2)" }}>
+            <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.25 }}>{question.q}</h1>
+            {question.sub && <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5 }}>{question.sub}</p>}
+            {question.body}
+            {err && <div role="alert" style={{ color: "#e06c5b", fontSize: 13 }}>{err}</div>}
+          </section>
+        )}
 
-      {step === "done" && card && (
-        <section style={{ display: "grid", gap: 12, padding: 20, borderRadius: 16, border: "1px solid rgba(111,207,124,.4)", background: "rgba(111,207,124,.06)" }}>
-          <h1 style={{ margin: 0, fontSize: 22 }}>{card.name} is set up in Ktulu.</h1>
-          <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5 }}>
-            Next come the texts, screen by screen, then a review and the build on staging (it stays disabled).
-            {figmaImage ? " For the image: run AF1 Ktulu Sync on the Team Cards board in Figma and link the artwork (Setup, step 3); it uploads by itself." : ""}
-          </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link className="btn btn-primary" href={`/teamcards/${card.id}?guided=page`}>
-              Write the texts, step by step
-            </Link>
-            <Link className="btn" href={`/teamcards/${card.id}`}>
-              Open the card
-            </Link>
+        {step === "done" && card && (
+          <section style={{ display: "grid", gap: 12, padding: 20, borderRadius: 16, border: "1px solid rgba(111,207,124,.4)", background: "rgba(111,207,124,.06)" }}>
+            <h1 style={{ margin: 0, fontSize: 22 }}>{card.name} is set up in Ktulu.</h1>
+            <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5 }}>
+              Next come the texts, screen by screen, then a review and the build on staging (it stays disabled).
+              {figmaImage ? " For the image: run AF1 Ktulu Sync on the Team Cards board in Figma and link the artwork (Setup, step 3); it uploads by itself." : ""}
+            </p>
+          </section>
+        )}
+      </div>
+
+      {/* actions always at the bottom: back and cancel left, skip and the main action right */}
+      <footer style={actionBar}>
+        {step === "done" && card ? (
+          <>
             <Link className="btn" href="/teamcards">
               All cards
             </Link>
-          </div>
-        </section>
-      )}
-      {step !== "done" && (
-        <Link href={card ? `/teamcards/${card.id}` : "/teamcards"} style={{ fontSize: 13, color: "var(--muted)" }}>
-          {card ? "Stop here, continue in the editor" : "Cancel"}
-        </Link>
-      )}
+            <span style={{ flex: 1 }} />
+            <Link className="btn" href={`/teamcards/${card.id}`}>
+              Open the card
+            </Link>
+            <Link className="btn btn-primary" href={`/teamcards/${card.id}?guided=page`}>
+              Write the texts, step by step
+            </Link>
+          </>
+        ) : (
+          <>
+            {progress > 1 && (
+              <button className="btn" onClick={back} disabled={busy}>
+                Back
+              </button>
+            )}
+            <Link className="btn" href={card ? `/teamcards/${card.id}` : "/teamcards"} style={{ border: "none", background: "transparent", color: "var(--muted)" }}>
+              {card ? "Stop here, continue in the editor" : "Cancel"}
+            </Link>
+            <span style={{ flex: 1 }} />
+            {question?.skip && (
+              <button className="btn" onClick={() => question && next(question.q, "Skipped for now")} disabled={busy}>
+                Skip for now
+              </button>
+            )}
+            {question?.go && (
+              <button className="btn btn-primary" onClick={() => void question.go!()} disabled={!question.ready || busy}>
+                {question.goLabel ?? (busy ? "Saving …" : "Continue")}
+              </button>
+            )}
+          </>
+        )}
+      </footer>
     </div>
   );
 }
