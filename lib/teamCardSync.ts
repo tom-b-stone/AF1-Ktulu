@@ -30,6 +30,7 @@ export type SyncStatus = {
 
 const KEY = "teamcards:sync";
 const artKey = (card: string) => `teamcards:art:${card}`;
+const same = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
 const shown = (v: unknown) => (v == null ? "" : typeof v === "object" ? "" : String(v));
 
 // a little parallelism, so 50 cards are checked in a few seconds
@@ -89,7 +90,9 @@ export async function checkSync(): Promise<SyncStatus> {
           const s = shown(getPath(docs[`${f.doc}:${l}`], f.path));
           const v = c.values[f.key];
           const k = f.localized ? shown((v as LocValue | undefined)?.[l]) : shown(v);
-          if (s.trim() === k.trim()) continue;
+          if (same(s, k)) continue;
+          // the CMS got the English text as a German stand-in: Ktulu keeps German as "missing", that's no change
+          if (l === "de" && !k.trim() && same(s, shown(getPath(docs[`${f.doc}:en`], f.path)))) continue;
           if (f.kind === "boolean" && (s === "" || s === "false") && (k === "" || k === "false")) continue;
           rows.push({ id: `${c.id}|${f.key}|${f.localized ? l : "-"}`, card: c.id, cardName: c.name, key: f.key, label: f.label, locale: f.localized ? l : null, kind: f.localized ? "text" : "setting", ktulu: k, staging: s, dir: dirOf(f.doc), stagingAt: docAt(f.doc), ktuluAt: c.updatedAt });
         }
