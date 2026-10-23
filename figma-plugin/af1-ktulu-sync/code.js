@@ -947,7 +947,7 @@ async function pagesFromDesign() {
     for (var j = 0; j < kids.length; j++) {
       var k = kids[j], t = await blockTypeOf(k);
       if (!t || !bps[t]) { if (k.type === "INSTANCE") log("  " + p.name + ": " + k.name + " skipped (" + (t ? "no " + t + " module on staging" : "not a CMS module") + ")"); continue; }
-      progress("Reading " + p.name + " · " + k.name + " …");
+      progress("Reading page " + (i + 1) + " / " + found.length + ": " + p.name + " · " + k.name + " …");
       var r0 = await readModule(k, t, bps[t], p.name, ctx);
       mods.push({ blockType: t, name: k.name, texts: r0.texts, images: r0.images });
     }
@@ -969,7 +969,7 @@ async function pagesFromDesign() {
   var r = await api("POST", { action: "build-pages", pages: out });
   r.steps.forEach(function (s) { log((s.ok ? "" : "⚠ ") + s.step); });
   for (var c = 0; c < r.cards.length; c++) {
-    progress("Pointing Team Card " + r.cards[c] + " at its page …");
+    progress("Linking Team Card " + (c + 1) + " / " + r.cards.length + ": " + r.cards[c] + " …");
     try { var cr = await api("POST", { action: "card-links", card: r.cards[c] }); log(r.cards[c] + (cr.ok ? ": links point to its page" : ": ⚠ " + ((cr.steps || []).slice(-1)[0] || {}).detail)); }
     catch (e) { log("⚠ " + r.cards[c] + ": " + (e && e.message ? e.message : e)); }
   }
