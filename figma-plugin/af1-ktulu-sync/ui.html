@@ -26,6 +26,9 @@
   #bar.busy .track { background: var(--bg2); }
   #bar .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--lava); transition: width .3s ease-out; }
   #bar.busy.indet .fill { width: 35%; animation: slide 1.1s ease-in-out infinite; }
+  #now { all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-size: 13px; flex-shrink: 0; }
+  #now:hover { background: var(--bg2); color: var(--ink); }
+  #bar.busy #now { opacity: .35; pointer-events: none; }
   #mini { all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-size: 14px; line-height: 1; flex-shrink: 0; }
   #mini:hover { background: var(--bg2); color: var(--ink); }
   body.mini { overflow: hidden; }
@@ -56,7 +59,7 @@
   .cand select { width: 100%; margin-top: 4px; }
   #artList { max-height: 260px; overflow: auto; }
 </style>
-<div id="bar" role="status" aria-live="polite"><div class="line"><span class="dot"></span><span id="progress">Ready</span><span id="count"></span><button id="mini" title="Small window: status only" aria-label="Small window">–</button></div><div class="track"><div class="fill"></div></div></div>
+<div id="bar" role="status" aria-live="polite"><div class="line"><span class="dot"></span><span id="progress">Ready</span><span id="count"></span><button id="now" title="Check now (it also checks by itself every 5 minutes)" aria-label="Check now">↻</button><button id="mini" title="Small window: status only" aria-label="Small window">–</button></div><div class="track"><div class="fill"></div></div></div>
 <div class="head"><h1>AF1 Ktulu Sync</h1><select id="campaign" hidden title="Campaign of this board"></select></div>
 <p id="sub">Figma, the AF1 Tool and staging stay in the same state.</p>
 <div class="tabs" role="tablist">
@@ -272,6 +275,7 @@
     $("mini").title = on ? "Open the full window" : "Small window: status only";
     if (tell) post("mini", { on });
   }
+  $("now").onclick = (e) => { e.stopPropagation(); setBar("Checking …"); post("check-now"); };
   $("mini").onclick = (e) => { e.stopPropagation(); setMini(!document.body.classList.contains("mini")); };
   $("bar").onclick = () => document.body.classList.contains("mini") && setMini(false);
   post("init");

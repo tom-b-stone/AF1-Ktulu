@@ -977,7 +977,7 @@ async function pagesFromDesign() {
   log("Done: " + r.pages.length + " draft pages on staging. Open the AF1 Tool to check them.");
 }
 
-// Background tick every 20 s, kept cheap: a light call for commands and changes from
+// Background tick every 5 minutes (or "Check now" in the status bar), kept cheap: a light call for commands and changes from
 // the tool; the full read and sync only when Figma or staging actually changed, and
 // never by switching pages under the person's feet.
 var bg = { figmaDirty: true, stamp: null, artAt: 0, watched: null };
@@ -995,10 +995,11 @@ async function onCampaignPage() {
   if (id) return figma.currentPage.id === id;
   return figma.currentPage.name === "AF1 · " + camp().name;
 }
-setInterval(async function () {
-  if (!state.live || state.busy || !state.token) return;
+async function bgTick(force) {
+  if ((!state.live && !force) || state.busy || !state.token) return;
+  if (force) progress("Checking Figma, the AF1 Tool and staging …");
   // card images: when something changed in Figma, else every 5 minutes
-  if (bg.figmaDirty || Date.now() - bg.artAt > 300000) { bg.artAt = Date.now(); await artSync(false); }
+  if (force || bg.figmaDirty || Date.now() - bg.artAt > 290000) { bg.artAt = Date.now(); await artSync(false); }
   if (!state.campaign || wrongBoard()) return;
   state.busy = true;
   try {
@@ -1011,19 +1012,21 @@ setInterval(async function () {
     }
     var pendingN = Object.keys(lite.pending || {}).length;
     var stagingChanged = lite.stamp && lite.stamp !== bg.stamp;
-    if (!bg.figmaDirty && !pendingN && !stagingChanged) return; // nothing new anywhere: no work
-    if (!(await onCampaignPage())) return; // the person works elsewhere in the file: wait until they're back
+    if (!force && !bg.figmaDirty && !pendingN && !stagingChanged) return; // nothing new anywhere: no work
+    if (!force && !(await onCampaignPage())) return; // the person works elsewhere in the file: wait until they're back
     bg.figmaDirty = false; bg.stamp = lite.stamp;
     state.data = await api("GET");
     var r = await sync({}, null, true); if (r.toCms.length || r.toFigma.length) await check();
   }
-  catch (e) { /* stay quiet in the background */ }
-  finally { state.busy = false; }
-}, 20000);
+  catch (e) { if (force) log("Check failed: " + (e && e.message ? e.message : e), true); }
+  finally { state.busy = false; if (force) progress(""); }
+}
+setInterval(function () { bgTick(false); }, 300000);
 
 figma.ui.onmessage = async function (msg) {
   if (msg.reqId && waits[msg.reqId]) { var w = waits[msg.reqId]; delete waits[msg.reqId]; if (msg.error) w.reject(new Error(msg.error)); else w.resolve(msg.result); return; }
   if (msg.type === "live") { state.live = !!msg.on; await figma.clientStorage.setAsync("live", state.live); return; }
+  if (msg.type === "check-now") { if (state.busy) { log("Still working, one moment."); return; } await bgTick(true); return; }
   // small window: only the status line (works while the plugin is busy, it stays live in the background)
   if (msg.type === "mini") {
     if (msg.on) figma.ui.resize(300, 44); else figma.ui.resize(440, 600);
