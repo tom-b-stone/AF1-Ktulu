@@ -39,8 +39,10 @@ var DARK = solid(0.118, 0.114, 0.114), ON_DARK = solid(0.961, 0.949, 0.949), ON_
 function autoLayout(dir) { var f = figma.createFrame(); f.layoutMode = dir; f.primaryAxisSizingMode = "AUTO"; f.counterAxisSizingMode = "AUTO"; f.fills = []; return f; }
 
 async function api(method, body, c, query) {
-  if (!c && !state.campaign) throw new Error("Pick the campaign of this board first.");
-  var res = await fetch(apiUrl(c) + (query ? "?" + query : ""), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  // no campaign yet (e.g. the first load failed): try again before giving up
+  if (!c && !state.campaign && state.token) { try { await loadCampaigns(); } catch (e) { /* the message below says what to do */ } }
+  if (!c && !state.campaign) throw new Error(state.campaigns && state.campaigns.length ? "Pick the campaign of this board first (menu at the top right)." : "Can't load the campaigns from the AF1 Tool. Check the connection, then click ↻.");
+  var res = await net(apiUrl(c) + (query ? "?" + query : ""), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   var j = await res.json();
   if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
   return j;
@@ -322,8 +324,15 @@ function wrongBoard() {
   var c = campaignOf(state.campaign), fk = fileKey();
   return !!(c && c.figmaFile && fk && c.figmaFile !== fk);
 }
+// fetch with one retry; a network hiccup (or Vercel deploying) reads as a clear message, not "Failed to fetch"
+async function net(url, opts) {
+  for (var i = 0; i < 2; i++) {
+    try { return await fetch(url, opts); }
+    catch (e) { if (i === 1) throw new Error("Can't reach the AF1 Tool right now (network or the tool is restarting). Try ↻ in a minute."); await new Promise(function (r) { setTimeout(r, 2500); }); }
+  }
+}
 async function loadCampaigns() {
-  var res = await fetch(apiUrl("_campaigns")), j = await res.json();
+  var res = await net(apiUrl("_campaigns")), j = await res.json();
   if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
   state.campaigns = j.campaigns || [];
   var fk = fileKey(), saved = figma.root.getSharedPluginData(NS, "campaign");
@@ -723,7 +732,7 @@ var art = { cards: [], last: 0, busy: false };
 var ACC = { "á": "a", "à": "a", "â": "a", "ã": "a", "ä": "a", "é": "e", "è": "e", "ê": "e", "ë": "e", "í": "i", "ì": "i", "î": "i", "ï": "i", "ó": "o", "ò": "o", "ô": "o", "õ": "o", "ö": "o", "ú": "u", "ù": "u", "û": "u", "ü": "u", "ç": "c", "ñ": "n", "ß": "ss" };
 function deacc(t) { return String(t || "").toLowerCase().replace(/[^\u0000-\u007f]/g, function (ch) { return ACC[ch] != null ? ACC[ch] : ch; }); }
 async function artApi(method, body) {
-  var res = await fetch(apiUrl("_cards"), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  var res = await net(apiUrl("_cards"), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   var j = await res.json();
   if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
   return j;
@@ -1000,7 +1009,8 @@ async function bgTick(force) {
   if (force) progress("Checking Figma, the AF1 Tool and staging …");
   // card images: when something changed in Figma, else every 5 minutes
   if (force || bg.figmaDirty || Date.now() - bg.artAt > 290000) { bg.artAt = Date.now(); await artSync(false); }
-  if (!state.campaign || wrongBoard()) return;
+  if (!state.campaign) { try { await loadCampaigns(); if (state.campaign) await check(); } catch (e) { if (force) { log(e.message, true); progress(""); } return; } }
+  if (!state.campaign || wrongBoard()) { if (force) progress(""); return; }
   state.busy = true;
   try {
     var lite = await api("GET", null, null, "light=1");
