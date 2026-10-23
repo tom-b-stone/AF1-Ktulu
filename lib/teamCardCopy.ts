@@ -195,18 +195,26 @@ export async function loyaltyTag(t: Json, steps: CopyStep[]): Promise<string | u
     return docs.find((d) => d.type === t.type) ?? docs[0];
   };
   const hit = await lookup();
+  if (hit && hit.type === t.type) return hit.id;
+  // the card's field only accepts a tag of the right type: the title is taken by another type,
+  // so use a tag of this type that contains the title (e.g. "miami 2026"), or make "<title> <type>"
+  let title2 = title;
   if (hit) {
-    if (hit.type !== t.type) steps.push({ step: `tag "${title}" exists on staging as ${hit.type} (production: ${t.type}), used as it is`, ok: true });
-    return hit.id;
+    const near = await stg(`/loyalty-category-tags?where[type][equals]=${encodeURIComponent(t.type)}&where[title][like]=${encodeURIComponent(title)}&limit=10&depth=0`).catch(() => ({ docs: [] }));
+    if (near.docs?.[0]) {
+      steps.push({ step: `tag "${title}" is a ${hit.type} tag on staging: used the ${t.type} tag "${near.docs[0].title}"`, ok: true });
+      return near.docs[0].id;
+    }
+    title2 = `${title} ${t.type}`;
   }
   try {
-    const doc = (await stg(`/loyalty-category-tags`, { method: "POST", body: JSON.stringify({ title, type: t.type }) })).doc;
-    steps.push({ step: `tag created: ${t.type} "${title}"`, ok: true });
+    const doc = (await stg(`/loyalty-category-tags`, { method: "POST", body: JSON.stringify({ title: title2, type: t.type }) })).doc;
+    steps.push({ step: `tag created: ${t.type} "${title2}"`, ok: true });
     return doc.id;
   } catch (e) {
     // made a moment ago by another step, or a title the lookup missed: use that one
     const again = /unique/i.test(e instanceof Error ? e.message : "") ? await lookup() : null;
-    if (again) return again.id;
+    if (again && again.type === t.type) return again.id;
     throw e;
   }
 }
