@@ -20,7 +20,7 @@
 //
 // Field keys: "<pageId>|<blockId>|<path>" for page modules,
 //             "badge:<badgeId>|card|<path>" for Team Card fields.
-import { kvGet, kvSet } from "./kv";
+import { kvGet, kvSet, kvSetEx } from "./kv";
 import { listContentTags, listMediaFolders, stagingRequest, uploadMedia } from "./payloadClient";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -355,6 +355,18 @@ function cardStates(badgeId: string, b: Json, race: string, season: string): Car
 }
 
 // ---- model ------------------------------------------------------------------
+// newest images with these content tags (for tag carousels), cached 10 min
+async function newestTagImages(tags: string[]): Promise<string[]> {
+  const k = `sitemap:tagimgs:${[...tags].sort().join(",")}`;
+  const hit = await kvGet(k).catch(() => null);
+  if (hit) return JSON.parse(hit) as string[];
+  const tw = encodeURIComponent(JSON.stringify({ and: [{ contentTags: { in: tags } }, { mimeType: { like: "image" } }] }));
+  const tr = await stg(`/media?where=${tw}&sort=-createdAt&limit=5&depth=0`).catch(() => ({ docs: [] }));
+  const ids = (tr.docs ?? []).map((m: Json) => m.id as string);
+  await kvSetEx(k, JSON.stringify(ids), 600).catch(() => {});
+  return ids;
+}
+
 export async function loadModel(c: Campaign): Promise<Model> {
   const where = encodeURIComponent(JSON.stringify({ url: { like: c.root } }));
   const r = await stg(`/pages?where=${where}&limit=100&depth=0&draft=true&locale=en&fallback-locale=none`);
@@ -392,17 +404,23 @@ export async function loadModel(c: Campaign): Promise<Model> {
       if (b.blockType === "single-card-showcase") b.fields.push(badgeField(b.badge!, bd, "publicTitle", "Name / Year"), badgeField(b.badge!, bd, "badgeImage", "Badge/Image", "image"));
       if (b.blockType === "badge-engagement-teaser") b.fields.push(badgeField(b.badge!, bd, "badgeImage", "Badge Image", "image"));
     }
-  // tag carousels show the newest images with the module's content tags (read-only in Figma)
+  // tag carousels show the newest images with the module's content tags (read-only in Figma).
+  // All at once and cached for 10 minutes: these queries made the Singapore check take ~15 s.
+  const tagJobs: Promise<void>[] = [];
   for (const p of pages)
     for (const b of p.blocks) {
       if (b.blockType !== "carousel-tags") continue;
       const sec = (docs.find((d) => d.id === p.id)?.sections ?? []).find((x: Json) => x.id === b.id);
       const tags = [...new Set(((sec?.carouselItems?.contentTagsList ?? []) as Json[]).flatMap((x) => (x.contentTags ?? []).map(idOf)))];
       if (!tags.length) continue;
-      const tw = encodeURIComponent(JSON.stringify({ and: [{ contentTags: { in: tags } }, { mimeType: { like: "image" } }] }));
-      const tr = await stg(`/media?where=${tw}&sort=-createdAt&limit=5&depth=0`).catch(() => ({ docs: [] }));
-      (tr.docs ?? []).forEach((m: Json, i: number) => b.fields.push({ key: `${p.id}|${b.id}|_figma.tagImage.${i}`, path: `_figma.tagImage.${i}`, layer: `ImageItem${i + 1}>ImageContainer`, value: m.id, kind: "image", readonly: true }));
+      tagJobs.push(
+        (async () => {
+          const ids = await newestTagImages(tags as string[]);
+          ids.forEach((id, i) => b.fields.push({ key: `${p.id}|${b.id}|_figma.tagImage.${i}`, path: `_figma.tagImage.${i}`, layer: `ImageItem${i + 1}>ImageContainer`, value: id, kind: "image", readonly: true }));
+        })(),
+      );
     }
+  await Promise.all(tagJobs);
   // the engagement inside the teaser module: its question replaces the sample Hot or Not
   const engIds = [...new Set(pages.flatMap((p) => p.blocks.map((b) => b.engagement).filter(Boolean) as string[]))];
   if (engIds.length) {

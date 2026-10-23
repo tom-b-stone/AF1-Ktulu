@@ -186,12 +186,29 @@ export async function remapMedia(v: Json, cache: Map<string, string>, steps: Cop
 export async function loyaltyTag(t: Json, steps: CopyStep[]): Promise<string | undefined> {
   if (!t) return undefined;
   const title = typeof t.title === "string" ? t.title : t.title?.en;
-  const where = `where[title][equals]=${encodeURIComponent(title)}&where[type][equals]=${encodeURIComponent(t.type)}`;
-  const found = await stg(`/loyalty-category-tags?${where}&limit=1&depth=0`);
-  if (found.docs?.[0]) return found.docs[0].id;
-  const doc = (await stg(`/loyalty-category-tags`, { method: "POST", body: JSON.stringify({ title, type: t.type }) })).doc;
-  steps.push({ step: `tag created: ${t.type} "${title}"`, ok: true });
-  return doc.id;
+  if (!title) return undefined;
+  // titles are unique on staging across all tag types: same title (any type, any case) = the same tag
+  const lookup = async () => {
+    const exact = await stg(`/loyalty-category-tags?where[title][equals]=${encodeURIComponent(title)}&limit=5&depth=0`).catch(() => ({ docs: [] }));
+    const loose = exact.docs?.length ? exact : await stg(`/loyalty-category-tags?where[title][like]=${encodeURIComponent(title)}&limit=20&depth=0`).catch(() => ({ docs: [] }));
+    const docs: Json[] = (loose.docs ?? []).filter((d: Json) => String(typeof d.title === "string" ? d.title : d.title?.en ?? "").trim().toLowerCase() === String(title).trim().toLowerCase());
+    return docs.find((d) => d.type === t.type) ?? docs[0];
+  };
+  const hit = await lookup();
+  if (hit) {
+    if (hit.type !== t.type) steps.push({ step: `tag "${title}" exists on staging as ${hit.type} (production: ${t.type}), used as it is`, ok: true });
+    return hit.id;
+  }
+  try {
+    const doc = (await stg(`/loyalty-category-tags`, { method: "POST", body: JSON.stringify({ title, type: t.type }) })).doc;
+    steps.push({ step: `tag created: ${t.type} "${title}"`, ok: true });
+    return doc.id;
+  } catch (e) {
+    // made a moment ago by another step, or a title the lookup missed: use that one
+    const again = /unique/i.test(e instanceof Error ? e.message : "") ? await lookup() : null;
+    if (again) return again.id;
+    throw e;
+  }
 }
 
 export async function badgeType(t: Json, steps: CopyStep[]): Promise<string | undefined> {

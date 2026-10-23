@@ -5,6 +5,7 @@ import { describeFigmaImage, placeholderAlt } from "@/lib/figmaImageAlt";
 import { blueprints, buildPagesFromFigma, type FigmaPage } from "@/lib/pagesFromFigma";
 import { createOnStaging } from "@/lib/teamCardCreate";
 import { canonicalLoc } from "@/lib/assetNaming";
+import { stagingRequest } from "@/lib/payloadClient";
 // "São Paulo" → "BRA" via the race list, else the first three letters
 const LOCS: Record<string, string> = { "sao paulo": "BRA", singapore: "SIN", "las vegas": "LVG", qatar: "QAT", "abu dhabi": "UAE", mexico: "MEX", austin: "USA" };
 const plainLoc = (t: string) => { const k = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(); return LOCS[k] ?? k.replace(/[^a-z]/g, "").slice(0, 3).toUpperCase(); };
@@ -49,6 +50,16 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const f = await mediaFile(media).catch(() => null);
     if (!f) return json({ error: "media not found" }, 404);
     return new NextResponse(f.body, { headers: { ...CORS, "Content-Type": f.type, "Cache-Control": "private, max-age=3600" } });
+  }
+  // ?light=1 → the plugin's background tick: only what's waiting and a marker for "staging changed"
+  if (req.nextUrl.searchParams.get("light")) {
+    const where = encodeURIComponent(JSON.stringify({ url: { like: c.root } }));
+    const [pending, command, last] = await Promise.all([
+      getPending(campaign),
+      getCommand(campaign),
+      stagingRequest(`/pages?where=${where}&limit=1&sort=-updatedAt&depth=0&draft=true&select[updatedAt]=true`).then((r) => r.json()).catch(() => null),
+    ]);
+    return json({ pending, command, stamp: last?.docs?.[0]?.updatedAt ?? null });
   }
   try {
     const [m, pending, command] = await Promise.all([loadModel(c), getPending(campaign), getCommand(campaign)]);

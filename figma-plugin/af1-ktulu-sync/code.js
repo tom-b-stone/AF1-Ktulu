@@ -38,9 +38,9 @@ var GRAPH = solid(0.169, 0.161, 0.161), CHALK = solid(0.961, 0.949, 0.949), MUTE
 var DARK = solid(0.118, 0.114, 0.114), ON_DARK = solid(0.961, 0.949, 0.949), ON_DARK_MUTED = solid(0.65, 0.64, 0.64);
 function autoLayout(dir) { var f = figma.createFrame(); f.layoutMode = dir; f.primaryAxisSizingMode = "AUTO"; f.counterAxisSizingMode = "AUTO"; f.fills = []; return f; }
 
-async function api(method, body, c) {
+async function api(method, body, c, query) {
   if (!c && !state.campaign) throw new Error("Pick the campaign of this board first.");
-  var res = await fetch(apiUrl(c), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  var res = await fetch(apiUrl(c) + (query ? "?" + query : ""), { method: method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   var j = await res.json();
   if (!res.ok) throw new Error(j && j.error ? j.error : "HTTP " + res.status);
   return j;
@@ -977,16 +977,44 @@ async function pagesFromDesign() {
   log("Done: " + r.pages.length + " draft pages on staging. Open the AF1 Tool to check them.");
 }
 
+// Background tick every 20 s, kept cheap: a light call for commands and changes from
+// the tool; the full read and sync only when Figma or staging actually changed, and
+// never by switching pages under the person's feet.
+var bg = { figmaDirty: true, stamp: null, artAt: 0, watched: null };
+function watchPage() {
+  var pg = figma.currentPage;
+  if (bg.watched === pg) return;
+  bg.watched = pg;
+  // changes the plugin makes itself (while busy) don't count
+  try { pg.on("nodechange", function () { if (!state.busy && !art.busy) bg.figmaDirty = true; }); } catch (e) { bg.figmaDirty = true; }
+}
+figma.on("currentpagechange", function () { watchPage(); bg.figmaDirty = true; });
+watchPage();
+async function onCampaignPage() {
+  var id = state.data && state.data.campaign && state.data.campaign.figmaPage;
+  if (id) return figma.currentPage.id === id;
+  return figma.currentPage.name === "AF1 · " + camp().name;
+}
 setInterval(async function () {
   if (!state.live || state.busy || !state.token) return;
-  await artSync(false);
+  // card images: when something changed in Figma, else every 5 minutes
+  if (bg.figmaDirty || Date.now() - bg.artAt > 300000) { bg.artAt = Date.now(); await artSync(false); }
   if (!state.campaign || wrongBoard()) return;
   state.busy = true;
   try {
-    // a rebuild queued in the AF1 Tool runs even while the plugin stays open
-    var d0 = await api("GET"); state.data = d0;
-    if (d0.command && d0.command.command === "pages-from-figma") { log("Building the staging pages from this design (asked in the AF1 Tool) …"); await pagesFromDesign(); await check(); return; }
-    if (d0.command && /^build/.test(d0.command.command)) { log("A full rebuild was requested in the AF1 Tool, building now …"); await buildAll(); await check(); return; }
+    var lite = await api("GET", null, null, "light=1");
+    if (lite.command && (lite.command.command === "pages-from-figma" || /^build/.test(lite.command.command))) {
+      state.data = await api("GET");
+      if (lite.command.command === "pages-from-figma") { log("Building the staging pages from this design (asked in the AF1 Tool) …"); await pagesFromDesign(); }
+      else { log("A full rebuild was requested in the AF1 Tool, building now …"); await buildAll(); }
+      await check(); return;
+    }
+    var pendingN = Object.keys(lite.pending || {}).length;
+    var stagingChanged = lite.stamp && lite.stamp !== bg.stamp;
+    if (!bg.figmaDirty && !pendingN && !stagingChanged) return; // nothing new anywhere: no work
+    if (!(await onCampaignPage())) return; // the person works elsewhere in the file: wait until they're back
+    bg.figmaDirty = false; bg.stamp = lite.stamp;
+    state.data = await api("GET");
     var r = await sync({}, null, true); if (r.toCms.length || r.toFigma.length) await check();
   }
   catch (e) { /* stay quiet in the background */ }
