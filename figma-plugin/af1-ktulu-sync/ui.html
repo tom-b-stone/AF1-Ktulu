@@ -26,6 +26,11 @@
   #bar.busy .track { background: var(--bg2); }
   #bar .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--lava); transition: width .3s ease-out; }
   #bar.busy.indet .fill { width: 35%; animation: slide 1.1s ease-in-out infinite; }
+  #mini { all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-size: 14px; line-height: 1; flex-shrink: 0; }
+  #mini:hover { background: var(--bg2); color: var(--ink); }
+  body.mini { overflow: hidden; }
+  body.mini > :not(#bar):not(script):not(style) { display: none !important; }
+  body.mini #bar { margin-bottom: 0; border-bottom: 0; padding-top: 11px; }
   @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
   @keyframes slide { 0% { left: -35%; } 100% { left: 100%; } }
   @media (prefers-reduced-motion: reduce) { #bar.busy .dot, #bar.busy.indet .fill { animation: none; } }
@@ -51,7 +56,7 @@
   .cand select { width: 100%; margin-top: 4px; }
   #artList { max-height: 260px; overflow: auto; }
 </style>
-<div id="bar" role="status" aria-live="polite"><div class="line"><span class="dot"></span><span id="progress">Ready</span><span id="count"></span></div><div class="track"><div class="fill"></div></div></div>
+<div id="bar" role="status" aria-live="polite"><div class="line"><span class="dot"></span><span id="progress">Ready</span><span id="count"></span><button id="mini" title="Small window: status only" aria-label="Small window">–</button></div><div class="track"><div class="fill"></div></div></div>
 <div class="head"><h1>AF1 Ktulu Sync</h1><select id="campaign" hidden title="Campaign of this board"></select></div>
 <p id="sub">Figma, the AF1 Tool and staging stay in the same state.</p>
 <div class="tabs" role="tablist">
@@ -244,6 +249,7 @@
     if (m.type === "checked") render(m);
     if (m.type === "campaigns") campaigns(m);
     if (m.type === "progress") setBar(m.msg);
+    if (m.type === "mini") setMini(m.on, false);
     if (m.type === "synced") log(`Applied: ${m.toCms} to the CMS, ${m.toFigma} into Figma` + (m.open ? `, ${m.open} left` : "") + "." + (m.written.length ? "\n" + m.written.join("\n") : ""));
     if (m.type === "log") log(m.msg);
     if (m.type === "error") { log(m.msg, true); if (/token/i.test(m.msg)) { tab("setup"); $("s1").open = true; } }
@@ -259,5 +265,14 @@
     $("count").textContent = m ? Math.round((100 * +m[1]) / +m[2]) + " %" : "";
     fill.style.width = m ? Math.min(100, (100 * +m[1]) / +m[2]) + "%" : busy ? "" : "0";
   }
+  // small window: just the status line; click again (or anywhere on the line) to open it fully
+  function setMini(on, tell = true) {
+    document.body.classList.toggle("mini", on);
+    $("mini").textContent = on ? "□" : "–";
+    $("mini").title = on ? "Open the full window" : "Small window: status only";
+    if (tell) post("mini", { on });
+  }
+  $("mini").onclick = (e) => { e.stopPropagation(); setMini(!document.body.classList.contains("mini")); };
+  $("bar").onclick = () => document.body.classList.contains("mini") && setMini(false);
   post("init");
 </script>

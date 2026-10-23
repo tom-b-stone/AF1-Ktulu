@@ -996,6 +996,12 @@ setInterval(async function () {
 figma.ui.onmessage = async function (msg) {
   if (msg.reqId && waits[msg.reqId]) { var w = waits[msg.reqId]; delete waits[msg.reqId]; if (msg.error) w.reject(new Error(msg.error)); else w.resolve(msg.result); return; }
   if (msg.type === "live") { state.live = !!msg.on; await figma.clientStorage.setAsync("live", state.live); return; }
+  // small window: only the status line (works while the plugin is busy, it stays live in the background)
+  if (msg.type === "mini") {
+    if (msg.on) figma.ui.resize(300, 44); else figma.ui.resize(440, 600);
+    await figma.clientStorage.setAsync("mini", !!msg.on);
+    return;
+  }
   if (state.busy) { log("Still working, one moment."); return; }
   state.busy = true;
   try {
@@ -1003,6 +1009,7 @@ figma.ui.onmessage = async function (msg) {
       state.token = (await figma.clientStorage.getAsync("token")) || "";
       var lv = await figma.clientStorage.getAsync("live"); state.live = lv === undefined ? true : !!lv;
       send("token", { token: state.token });
+      if (await figma.clientStorage.getAsync("mini")) { figma.ui.resize(300, 44); send("mini", { on: true }); }
       if (state.token) await loadCampaigns();
       if (state.token && state.campaign && !wrongBoard()) {
         var pre = await api("GET"); state.data = pre;
