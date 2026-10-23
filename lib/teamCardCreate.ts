@@ -230,7 +230,8 @@ async function linkCopied(cardId: string, stagingBadge: string, stagingPage: str
   c.log = [{ at: new Date().toISOString(), by, summary: `Copied from production (${title}): card, engagement and page, staging overwritten` }, ...c.log].slice(0, 50);
   await saveCardsPublic(fresh);
   await reloadCard(cardId).catch(() => undefined);
-  return note ? { step: note, ok: false } : { step: `card points at its page, module${engagementId ? " and engagement" : ""} on staging`, ok: true };
+  if (note) return { step: note, ok: false };
+  return { step: stagingPage ? `card points at its page, module${engagementId ? " and engagement" : ""} on staging` : "card and engagement linked on staging (no page)", ok: true };
 }
 
 // Card, engagement and the whole page it sits on, from production to staging.
